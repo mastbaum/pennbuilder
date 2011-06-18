@@ -1,6 +1,8 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-#include <jemalloc/jemalloc.h>
+#include <pthread.h>
+#include "server.h"
 #include "ds.h"
 
 /** Event Builder for SNO+, C edition
@@ -8,25 +10,30 @@
  *  Enqueues incoming raw data in a ring buffer, and writes out to RAT files
  *  as events are finished (per XL3 flag) or buffer is filling up.
  *
- *  Ring buffer based on example found at 
- *  http://en.wikipedia.org/wiki/Circular_buffer.
- *  
  *  Andy Mastbaum (mastbaum@hep.upenn.edu), June 2011
  */ 
  
 int main(int argc, char *argv[])
 {
-    Buffer* b;
-    uint64_t a;
-    int empty;
+    int port;
+    if(argc != 2) {
+        printf("Usage: %s <port>\n", argv[0]);
+        exit(1);
+    }
+    else
+        port = atoi(argv[1]);
 
+    Buffer* b;
     buffer_alloc(&b);
 
-    printf("%d %d %d\n", sizeof(uint16_t), sizeof(uint32_t), sizeof(uint64_t));
+    pthread_t tlistener;
+    pthread_create(&tlistener, NULL, listener, (void*)&port);
 
-    Event* e;
-    buffer_at(b, 32, &e);
-    printf("%li\n", e->pmt[1234]->word1);
+    //pthread_t tshipper;
+    //pthread_create(&tshipper, NULL, ship, NULL);
+
+    pthread_join(tlistener, NULL);
+    //pthread_join(tshipper, NULL);
 
     buffer_clear(b);
     free(b);

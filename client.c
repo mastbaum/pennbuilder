@@ -5,6 +5,7 @@
 #include <netinet/in.h>
 #include <netdb.h> 
 #include <signal.h>
+#include <jemalloc/jemalloc.h>
 #include "ds.h"
 
 int sockfd;

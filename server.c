@@ -5,12 +5,9 @@
 #include <netinet/in.h>
 #include <pthread.h>
 #include <signal.h>
+#include <jemalloc/jemalloc.h>
+#include "server.h"
 #include "ds.h"
-#include "signal_handler.h"
-
-#define NUM_THREADS 20
-
-int sockfd, thread_sockfd[NUM_THREADS];
 
 inline void close_sockets()
 {
@@ -61,16 +58,12 @@ inline void* dostuff(void* psock)
     }
 }
 
-void* listen(void* ptr)
+void* listener(void* ptr)
 {
      int portno;
      socklen_t clilen;
      struct sockaddr_in serv_addr, cli_addr;
 
-     if (argc < 2) {
-         fprintf(stderr,"ERROR, no port provided\n");
-         exit(1);
-     }
      portno = *((int*)ptr);
 
      sockfd = socket(AF_INET, SOCK_STREAM, 0);
