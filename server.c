@@ -3,8 +3,10 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <signal.h>
 #include <pthread.h>
+#include <signal.h>
+#include "ds.h"
+#include "signal_handler.h"
 
 #define NUM_THREADS 20
 
@@ -38,12 +40,12 @@ inline void die(const char *msg)
 inline void* dostuff(void* psock)
 {
     int sock = *((int*) psock);
-    int BUFFER_LEN = 256;
-    char buffer[BUFFER_LEN];
+    int BUFFER_LEN = sizeof(PMTBundle);
+    PMTBundle* p = malloc(BUFFER_LEN);
 
     while(1) {
-        memset(buffer, 0, BUFFER_LEN);
-        int r = recv(sock, &buffer, BUFFER_LEN, 0);
+        memset(p, 0, BUFFER_LEN);
+        int r = recv(sock, p, BUFFER_LEN, 0);
         if(r<0) {
             die("ERROR reading from socket");
             break;
@@ -53,11 +55,13 @@ inline void* dostuff(void* psock)
             break;
         }
         else
-            printf("Here is the message: %s\n",buffer);
+            //continue;
+            printf("Received PMTBundle on socket %i\n", sock);
+            pmtbundle_print(p);
     }
 }
 
-int main(int argc, char *argv[])
+void* listen(void* ptr)
 {
      int portno;
      socklen_t clilen;
@@ -67,7 +71,7 @@ int main(int argc, char *argv[])
          fprintf(stderr,"ERROR, no port provided\n");
          exit(1);
      }
-     portno = atoi(argv[1]);
+     portno = *((int*)ptr);
 
      sockfd = socket(AF_INET, SOCK_STREAM, 0);
      if(sockfd < 0) die("ERROR opening socket");
@@ -101,6 +105,5 @@ int main(int argc, char *argv[])
      }
 
      close_sockets();
-     return 0;
 }
 
