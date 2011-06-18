@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <string.h>
-#include <malloc.h>
+#include <jemalloc/jemalloc.h>
 
 /** Event Builder for SNO+, C edition
  *  
@@ -13,8 +13,9 @@
  *  Andy Mastbaum (mastbaum@hep.upenn.edu), June 2011
  */ 
  
-#define BUFFER_SIZE 20000
+#define BUFFER_SIZE 2000
 #define NUM_OF_ELEMS (BUFFER_SIZE-1)
+#define NPMTS 10000
 
 typedef unsigned long uint64_t; 
 typedef unsigned int uint32_t;
@@ -49,10 +50,20 @@ typedef struct
 /// At 120 KB/event, a PC with 24GB of RAM can store 200000 events in memory
 typedef struct
 {
-    PMTBundle pmt[10000];
+    PMTBundle* pmt[NPMTS]; // using a pointer array saves space for nhit < 3333
     MTCData mtc;
     CAENData caen;
 } Event;
+
+inline void event_clear(Event* e)
+{
+    int i;
+    for(i=0; i<NPMTS; i++)
+        if(e->pmt[i]) {
+            free(e->pmt[i]);
+            e->pmt[i] = NULL;
+        }
+}
 
 /** Ring FIFO buffer */
 typedef struct
@@ -61,24 +72,32 @@ typedef struct
     uint64_t start;
     uint64_t offset; // index-gtid offset (first gtid)
     uint64_t size;
-    Event* keys[0];
+    Event* keys[BUFFER_SIZE];
 } Buffer;
  
-Buffer* buffer_alloc(Buffer** pb, int size)
+Buffer* buffer_alloc(Buffer** pb)
 {
-    int sz = size * sizeof(Event) + sizeof(Buffer);
-    *pb = (Buffer*) malloc(sz);
+    int sz = sizeof(Buffer);
+    *pb = malloc(sz);
     if(*pb)
     {
-        printf("Initializing buffer: keys[%d] (%d)\n", size, sz);
-        (*pb)->size = size;
+        printf("Initializing buffer: keys[%d] (%d)\n", BUFFER_SIZE, sz);
+        (*pb)->size = BUFFER_SIZE;
         (*pb)->end = 0;
         (*pb)->start  = 0;
         (*pb)->offset = 0;
 
         int i;
-        for(i=0; i<size; i++)
-            (*pb)->keys[i] = NULL;
+        for(i=0; i<(*pb)->size; i++) {
+            Event* e = malloc(sizeof(Event));
+            int j;
+            for(j=0;j<10000;j++) {
+                PMTBundle* p = malloc(sizeof(PMTBundle));
+                p->word1 = i*100;
+                e->pmt[j] = p;
+            }
+            (*pb)->keys[i] = e;
+        }
     }
     return *pb;
 }
@@ -93,7 +112,7 @@ inline int buffer_isempty(Buffer* b)
     return (b->start == b->end);
 }
  
-inline int buffer_push(Buffer* b, uint64_t key)
+inline int buffer_push(Buffer* b, Event* key)
 {
     int full = buffer_isfull(b);
     if(!full)
@@ -110,8 +129,7 @@ inline int buffer_pop(Buffer* b, Event* pk)
     int empty = buffer_isempty(b);
     if(!empty)
     {
-        *pk = b->keys[b->start];
-        // legit? slow? have to malloc them now...
+        pk = b->keys[b->start];
         free(b->keys[b->start]);
         b->keys[b->start] = NULL;
         b->start++;
@@ -119,7 +137,7 @@ inline int buffer_pop(Buffer* b, Event* pk)
     }
     return !empty;
 }
- 
+
 inline void buffer_status(Buffer* b)
 {
     printf("write: %d, read: %d, full: %d, empty: %d\n", b->end,
@@ -128,37 +146,40 @@ inline void buffer_status(Buffer* b)
                                                          buffer_isempty(b));
 }
 
-// for testing only
 inline void buffer_clear(Buffer* b)
 {
     int i;
     for(i=0; i<b->size; i++)
-        b->keys[i] = 0;
+        if(b->keys[i]) {
+            event_clear(b->keys[i]);
+            free(b->keys[i]);
+            b->keys[i] = NULL;
+        }
     b->end = 0;
     b->start = 0;
 }
 
 // random access
-inline int buffer_at(Buffer* b, unsigned int id, uint16_t* pk)
+inline int buffer_at(Buffer* b, unsigned int id, Event** pk)
 {
-    keyid = (id - b->first_gtid) % b->size;
+    int keyid = (id - b->offset) % b->size;
     if (keyid < b->size) {
-        *pk = b->keys[keyid];
-        return pk == NULL ? 0 : 1;
+        (*pk) = b->keys[keyid];
+        return pk == NULL ? 1 : 0;
     }
     else
-        return 0;
+        return 1;
 }
 
-inline int buffer_insert(Buffer* b, unsigned int id, uint16_t* pk)
+inline int buffer_insert(Buffer* b, unsigned int id, Event* pk)
 {
-    keyid = (id - b->first_gtid) % b->size;
-    if (keyid < b->size) {
-        *pk = b->keys[keyid];
-        return pk == NULL ? 0 : 1;
+    int keyid = (id - b->offset) % b->size;
+    if (!b->keys[keyid] && (keyid < b->size)) {
+        b->keys[keyid] = pk;
+        return 0;
     }
     else
-        return 0;
+        return 1;
 }
 
 /** main */
@@ -168,9 +189,9 @@ int main(int argc, char *argv[])
     uint64_t a;
     int empty;
 
-    buffer_alloc(&b, BUFFER_SIZE);
+    buffer_alloc(&b);
 
-    
+    printf("%d %d %d\n", sizeof(uint16_t), sizeof(uint32_t), sizeof(uint64_t));
 
 /*
     int i;
@@ -183,6 +204,16 @@ int main(int argc, char *argv[])
         continue;
         //printf("pop %d\n",a);
 */
+
+    Event* e;
+    buffer_at(b, 32, &e);
+    printf("%li\n", e->pmt[1234]->word1);
+
+    printf("sleep\n");
+    unsigned long i;
+    for(i=0; i<2400000000; i++) continue;
+
+    buffer_clear(b);
     free(b);
     return 0;
 }
