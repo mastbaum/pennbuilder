@@ -24,6 +24,11 @@ void handler(int signal)
     if(signal == SIGINT) {
         printf("\nCaught CTRL-C (SIGINT), Exiting...\n");
         close_sockets();
+        if(!buffer_isempty(b)) {
+            printf("Warning: exiting with non-empty buffer\n");
+            buffer_status(b);
+        }
+        buffer_clear(b);
         exit(0);
     }
     else
@@ -53,29 +58,23 @@ void* dostuff(void* psock)
             printf("Client terminated connection...\n");
             break;
         }
-        else
+        else {
             //continue;
-            printf("Received PMTBundle on socket %i\n", sock);
-            pmtbundle_print(p);
+            //printf("Received PMTBundle on socket %i\n", sock);
+            //pmtbundle_print(p);
             Event* e;
             buffer_at(b, p->gtid, &e);
             pthread_mutex_t m = b->mutex;
             pthread_mutex_lock(&m);
             if(e == NULL) {
-                printf("malloc new event\n");
                 e = malloc(sizeof(Event));
-                e->pmt[p->pmtid]->word1 = p->word1;
-                e->pmt[p->pmtid]->word2 = p->word2;
-                e->pmt[p->pmtid]->word3 = p->word3;
+                e->pmt[p->pmtid] = p;
                 buffer_insert(b, p->gtid, e);
             }
             else {
-                printf("e exists at %p\n", e);
-                e->pmt[p->pmtid]->word1 = p->word1;
-                e->pmt[p->pmtid]->word2 = p->word2;
-                e->pmt[p->pmtid]->word3 = p->word3;
+                e->pmt[p->pmtid] = p;
             }
-            buffer_status(b);
+        }
     }
 }
 

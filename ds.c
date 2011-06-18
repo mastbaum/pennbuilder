@@ -1,10 +1,14 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "ds.h"
+#include "jemalloc/jemalloc.h"
 
 void pmtbundle_print(PMTBundle* p)
 {
     printf("PMTBundle at %p:\n", p);
+    printf("  pmtid =  %i:\n", p->pmtid);
+    printf("  gtid  =  %i:\n", p->gtid);
     printf("  word1 =  %u:\n", p->word1);
     printf("  word2 =  %u:\n", p->word2);
     printf("  word3 =  %u:\n", p->word3);
@@ -27,11 +31,13 @@ Buffer* buffer_alloc(Buffer** pb)
     if(*pb)
     {
         printf("Initializing buffer: keys[%d] (%d)\n", BUFFER_SIZE, sz);
+        memset(*pb, 0, sizeof(Buffer));
         (*pb)->size = BUFFER_SIZE;
         (*pb)->end = 0;
         (*pb)->start  = 0;
         (*pb)->offset = 0;
 
+/*
         int i;
         for(i=0; i<(*pb)->size; i++) {
             Event* e = malloc(sizeof(Event));
@@ -43,6 +49,7 @@ Buffer* buffer_alloc(Buffer** pb)
             }
             (*pb)->keys[i] = e;
         }
+*/
     }
     return *pb;
 }
@@ -92,10 +99,11 @@ int buffer_pop(Buffer* b, Event* pk)
 
 void buffer_status(Buffer* b)
 {
-    printf("write: %lu, read: %lu, full: %d, empty: %d\n", b->end,
-                                                           b->start,
-                                                           buffer_isfull(b),
-                                                           buffer_isempty(b));
+    printf("Buffer at %p:\n", b);
+    printf("  write: %lu, read: %lu, full: %d, empty: %d\n", b->end,
+                                                             b->start,
+                                                             buffer_isfull(b),
+                                                             buffer_isempty(b));
 }
 
 void buffer_clear(Buffer* b)
@@ -114,12 +122,11 @@ void buffer_clear(Buffer* b)
     b->start = 0;
 }
 
-// random access
 int buffer_at(Buffer* b, unsigned int id, Event** pk)
 {
     int keyid = (id - b->offset) % b->size;
     if (keyid < b->size) {
-        (*pk) = b->keys[keyid];
+        *pk = b->keys[keyid];
         return pk == NULL ? 1 : 0;
     }
     else
@@ -130,9 +137,13 @@ int buffer_insert(Buffer* b, unsigned int id, Event* pk)
 {
     int keyid = (id - b->offset) % b->size;
     if (!b->keys[keyid] && (keyid < b->size)) {
-        pthread_mutex_t m = b->keys[keyid]->mutex;
+        pthread_mutex_t m = b->mutex;
         pthread_mutex_lock(&m);
         b->keys[keyid] = pk;
+        if(keyid > b->end) {
+            b->end = keyid;
+            b->end %= b->size;
+        }
         pthread_mutex_unlock(&m);
         return 0;
     }

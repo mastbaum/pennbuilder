@@ -36,6 +36,7 @@ int main(int argc, char *argv[])
     pthread_join(tlistener, NULL);
     //pthread_join(tshipper, NULL);
 
+    buffer_status(b);
     buffer_clear(b);
     free(b);
     return 0;
