@@ -1,3 +1,5 @@
+#include <pthread.h>
+
 typedef unsigned long uint64_t; 
 typedef unsigned int uint32_t;
 typedef unsigned short uint16_t;
@@ -9,6 +11,8 @@ typedef unsigned short uint16_t;
 /// PMTBundle contains raw PMT data packed into 3 32-bit words (96 bits)
 typedef struct
 {
+    int pmtid; // cheat for testing
+    int gtid;
     uint32_t word1;
     uint32_t word2;
     uint32_t word3;
@@ -38,6 +42,7 @@ typedef struct
     PMTBundle* pmt[NPMTS]; // using a pointer array saves space for nhit < 3333
     MTCData mtc;
     CAENData caen;
+    pthread_mutex_t mutex;
 } Event;
 
 void event_clear(Event* e);
@@ -57,6 +62,7 @@ typedef struct
     uint64_t offset; // index-gtid offset (first gtid)
     uint64_t size;
     Event* keys[BUFFER_SIZE];
+    pthread_mutex_t mutex;
 } Buffer;
  
 Buffer* buffer_alloc(Buffer** pb);

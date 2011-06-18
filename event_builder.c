@@ -13,6 +13,8 @@
  *  Andy Mastbaum (mastbaum@hep.upenn.edu), June 2011
  */ 
  
+Buffer* b;
+
 int main(int argc, char *argv[])
 {
     int port;
@@ -23,7 +25,6 @@ int main(int argc, char *argv[])
     else
         port = atoi(argv[1]);
 
-    Buffer* b;
     buffer_alloc(&b);
 
     pthread_t tlistener;

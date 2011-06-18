@@ -75,8 +75,15 @@ int buffer_pop(Buffer* b, Event* pk)
     if(!empty)
     {
         pk = b->keys[b->start];
+        pthread_mutex_t m;
+        if(pk) {
+            m = b->keys[b->start]->mutex;
+            pthread_mutex_lock(&m);
+        }
         free(b->keys[b->start]);
         b->keys[b->start] = NULL;
+        if(pk)
+            pthread_mutex_unlock(&m);
         b->start++;
         b->start %= b->size;
     }
@@ -96,9 +103,12 @@ void buffer_clear(Buffer* b)
     int i;
     for(i=0; i<b->size; i++)
         if(b->keys[i]) {
+            pthread_mutex_t m = b->keys[i]->mutex;
+            pthread_mutex_lock(&m);
             event_clear(b->keys[i]);
             free(b->keys[i]);
             b->keys[i] = NULL;
+            pthread_mutex_unlock(&m);
         }
     b->end = 0;
     b->start = 0;
@@ -120,7 +130,10 @@ int buffer_insert(Buffer* b, unsigned int id, Event* pk)
 {
     int keyid = (id - b->offset) % b->size;
     if (!b->keys[keyid] && (keyid < b->size)) {
+        pthread_mutex_t m = b->keys[keyid]->mutex;
+        pthread_mutex_lock(&m);
         b->keys[keyid] = pk;
+        pthread_mutex_unlock(&m);
         return 0;
     }
     else

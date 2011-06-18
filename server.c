@@ -9,7 +9,9 @@
 #include "server.h"
 #include "ds.h"
 
-inline void close_sockets()
+extern Buffer* b;
+
+void close_sockets()
 {
     int i;
     for(i=0; i<NUM_THREADS; i++)
@@ -17,7 +19,7 @@ inline void close_sockets()
     close(sockfd);
 }
 
-inline void handler(int signal)
+void handler(int signal)
 {
     if(signal == SIGINT) {
         printf("\nCaught CTRL-C (SIGINT), Exiting...\n");
@@ -28,13 +30,13 @@ inline void handler(int signal)
         printf("\nCaught signal %i\n", signal);
 }
 
-inline void die(const char *msg)
+void die(const char *msg)
 {
     perror(msg);
     exit(1);
 }
 
-inline void* dostuff(void* psock)
+void* dostuff(void* psock)
 {
     int sock = *((int*) psock);
     int BUFFER_LEN = sizeof(PMTBundle);
@@ -55,6 +57,25 @@ inline void* dostuff(void* psock)
             //continue;
             printf("Received PMTBundle on socket %i\n", sock);
             pmtbundle_print(p);
+            Event* e;
+            buffer_at(b, p->gtid, &e);
+            pthread_mutex_t m = b->mutex;
+            pthread_mutex_lock(&m);
+            if(e == NULL) {
+                printf("malloc new event\n");
+                e = malloc(sizeof(Event));
+                e->pmt[p->pmtid]->word1 = p->word1;
+                e->pmt[p->pmtid]->word2 = p->word2;
+                e->pmt[p->pmtid]->word3 = p->word3;
+                buffer_insert(b, p->gtid, e);
+            }
+            else {
+                printf("e exists at %p\n", e);
+                e->pmt[p->pmtid]->word1 = p->word1;
+                e->pmt[p->pmtid]->word2 = p->word2;
+                e->pmt[p->pmtid]->word3 = p->word3;
+            }
+            buffer_status(b);
     }
 }
 
