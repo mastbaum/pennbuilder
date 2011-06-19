@@ -39,7 +39,7 @@ typedef struct
 /// At 120 KB/event, a PC with 24GB of RAM can store 200000 events in memory
 typedef struct
 {
-    PMTBundle* pmt[NPMTS]; // using a pointer array saves space for nhit < 3333
+    PMTBundle pmt[NPMTS]; // using a pointer array saves space for nhit < 3333
     MTCData mtc;
     CAENData caen;
     pthread_mutex_t mutex;

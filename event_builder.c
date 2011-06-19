@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
-#include "server.h"
+#include "listener.h"
 #include "ds.h"
 
 /** Event Builder for SNO+, C edition

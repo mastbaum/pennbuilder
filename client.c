@@ -57,20 +57,18 @@ int main(int argc, char *argv[])
     int ipmt, igtid;
     for(igtid=0; igtid<3; igtid++)
         for(ipmt=0; ipmt<5; ipmt++) {
-            PMTBundle* b = malloc(sizeof(PMTBundle));
-            b->gtid = igtid;
-            b->pmtid = ipmt;
-            b->word1 = 12345;
-            b->word2 = 65535;
-            b->word3 = ipmt;
+            PMTBundle b;
+            b.gtid = igtid;
+            b.pmtid = ipmt;
+            b.word1 = 12345;
+            b.word2 = 65535;
+            b.word3 = ipmt;
 
-            n = send(sockfd,b,sizeof(PMTBundle),0);
+            n = send(sockfd, &b, sizeof(PMTBundle), 0);
             if (n < 0) {
                 error("ERROR writing to socket");
                 break;
             }
-
-            free(b);
         }
     
     close(sockfd);
