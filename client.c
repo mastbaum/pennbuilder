@@ -60,9 +60,9 @@ int main(int argc, char *argv[])
             PMTBundle b;
             b.gtid = igtid;
             b.pmtid = ipmt;
-            b.word1 = 12345;
-            b.word2 = 65535;
-            b.word3 = ipmt;
+            b.word[0] = 12345;
+            b.word[1] = 65535;
+            b.word[2] = ipmt;
 
             n = send(sockfd, &b, sizeof(PMTBundle), 0);
             if (n < 0) {

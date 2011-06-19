@@ -9,9 +9,9 @@ void pmtbundle_print(PMTBundle* p)
     printf("PMTBundle at %p:\n", p);
     printf("  pmtid =  %i:\n", p->pmtid);
     printf("  gtid  =  %i:\n", p->gtid);
-    printf("  word1 =  %u:\n", p->word1);
-    printf("  word2 =  %u:\n", p->word2);
-    printf("  word3 =  %u:\n", p->word3);
+    int i;
+    for(i=0; i<3; i++)
+        printf("  word%i =  %u:\n", i, p->word[i]);
 }
 
 Buffer* buffer_alloc(Buffer** pb)
