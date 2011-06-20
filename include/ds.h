@@ -134,23 +134,34 @@ typedef struct
  *  Based on example found at 
  *  http://en.wikipedia.org/wiki/Circular_buffer.
  */
+
+// record types
+#define EMPTY 0
+#define DETECTOR_EVENT 1
+#define RUN_HEADER 2
+#define AV_STATUS_HEADER 3
+#define MANIPULATOR_STATUS_HEADER 4
+#define TRIG_BANK_HEADER 5
+#define EPED_BANK_HEADER 6
+
 typedef struct
 {
     uint64_t end;
     uint64_t start;
     uint64_t offset; // index-gtid offset (first gtid)
     uint64_t size;
-    Event* keys[BUFFER_SIZE];
+    void* keys[BUFFER_SIZE];
+    char type[BUFFER_SIZE];
     pthread_mutex_t mutex;
 } Buffer;
  
 Buffer* buffer_alloc(Buffer** pb);
 int buffer_isfull(Buffer* b);
 int buffer_isempty(Buffer* b);
-int buffer_push(Buffer* b, Event* key);
-int buffer_pop(Buffer* b, Event* pk);
+int buffer_push(Buffer* b, void* key);
+int buffer_pop(Buffer* b, void* pk);
 void buffer_status(Buffer* b);
 void buffer_clear(Buffer* b);
-int buffer_at(Buffer* b, unsigned int id, Event** pk);
-int buffer_insert(Buffer* b, unsigned int id, Event* pk);
+int buffer_at(Buffer* b, unsigned int id, char* type, void** pk);
+int buffer_insert(Buffer* b, unsigned int id, char type, void* pk);
 

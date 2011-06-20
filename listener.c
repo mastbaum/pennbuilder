@@ -6,7 +6,7 @@
 #include <pthread.h>
 #include <signal.h>
 #include <jemalloc/jemalloc.h>
-#include "server.h"
+#include "listener.h"
 #include "ds.h"
 
 extern Buffer* b;
@@ -41,15 +41,15 @@ void die(const char *msg)
     exit(1);
 }
 
-void* dostuff(void* psock)
+void* listener_child(void* psock)
 {
     int sock = *((int*) psock);
     int BUFFER_LEN = sizeof(PMTBundle);
-    PMTBundle* p = malloc(BUFFER_LEN);
+    PMTBundle p;
 
     while(1) {
-        memset(p, 0, BUFFER_LEN);
-        int r = recv(sock, p, BUFFER_LEN, 0);
+        memset(&p, 0, BUFFER_LEN);
+        int r = recv(sock, &p, BUFFER_LEN, 0);
         if(r<0) {
             die("ERROR reading from socket");
             break;
@@ -61,18 +61,18 @@ void* dostuff(void* psock)
         else {
             //continue;
             //printf("Received PMTBundle on socket %i\n", sock);
-            //pmtbundle_print(p);
+            pmtbundle_print(&p);
             Event* e;
-            buffer_at(b, p->gtid, &e);
+            buffer_at(b, p.gtid, &e);
             pthread_mutex_t m = b->mutex;
             pthread_mutex_lock(&m);
             if(e == NULL) {
                 e = malloc(sizeof(Event));
-                e->pmt[p->pmtid] = p;
-                buffer_insert(b, p->gtid, e);
+                e->pmt[p.pmtid] = p;
+                buffer_insert(b, p.gtid, e);
             }
             else {
-                e->pmt[p->pmtid] = p;
+                e->pmt[p.pmtid] = p;
             }
         }
     }
@@ -111,7 +111,7 @@ void* listener(void* ptr)
              printf("spawning thread with index %i\n", thread_index);
              pthread_create(&(threads[thread_index]),
                             NULL,
-                            dostuff,
+                            listener_child,
                             (void*)&(thread_sockfd[thread_index]));
              thread_index++;
          }
