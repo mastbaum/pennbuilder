@@ -7,6 +7,7 @@
 #include <signal.h>
 #include <jemalloc/jemalloc.h>
 #include "ds.h"
+#include "listener.h"
 
 int sockfd;
 

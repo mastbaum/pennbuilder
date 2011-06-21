@@ -72,7 +72,7 @@ void* listener_child(void* psock)
             break;
         }
         else {
-            PacketType packet_type = packet_id(packet_buffer);
+            PacketType packet_type = ((PacketHeader*) packet_buffer)->type;
             printf("got packet of type %i\n", packet_type);
             if(packet_type == PMTBUNDLE) {
                 XL3Packet* p = realloc(packet_buffer, sizeof(XL3Packet));

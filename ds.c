@@ -6,6 +6,13 @@
 #include <jemalloc/jemalloc.h>
 #include "ds.h"
 
+int get_bits(int x, int position, int count)
+{
+  int shifted = x >> position;
+  int mask = ((uint64_t)1 << count) - 1;
+  return shifted & mask;
+}
+
 void pmtbundle_print(PMTBundle* p)
 {
     printf("PMTBundle at %p:\n", p);
@@ -14,6 +21,22 @@ void pmtbundle_print(PMTBundle* p)
     int i;
     for(i=0; i<3; i++)
         printf("  word%i =  %u:\n", i, p->word[i]);
+}
+
+uint32_t pmtbundle_pmtid(PMTBundle* p)
+{
+    int ichan = get_bits(p->word[0], 16, 5);
+    int icard = get_bits(p->word[0], 26, 4);
+    int icrate = get_bits(p->word[0], 21, 5);
+    return (512*icrate + 32*icard + ichan);
+}
+
+uint32_t pmtbundle_gtid(PMTBundle* p)
+{
+    int gtid1 = get_bits(p->word[0], 0, 16);
+    int gtid2 = get_bits(p->word[2], 12, 4);
+    int gtid3 = get_bits(p->word[2], 28, 4);
+    return (gtid1 + (gtid2<<16) + (gtid3<<20));
 }
 
 Buffer* buffer_alloc(Buffer** pb, int size)
@@ -133,35 +156,5 @@ int buffer_insert(Buffer* b, unsigned int id, RecordType type, void* pk)
     }
     else
         return 1;
-}
-
-// listener
-
-PacketType packet_id(int* packet) {
-    PacketHeader* h = (PacketHeader*) packet;
-    return h->type;
-}
-
-int get_bits(int x, int position, int count)
-{
-  int shifted = x >> position;
-  int mask = ((uint64_t)1 << count) - 1;
-  return shifted & mask;
-}
-
-uint32_t pmtbundle_pmtid(PMTBundle* p)
-{
-    int ichan = get_bits(p->word[0], 16, 5);
-    int icard = get_bits(p->word[0], 26, 4);
-    int icrate = get_bits(p->word[0], 21, 5);
-    return (512*icrate + 32*icard + ichan);
-}
-
-uint32_t pmtbundle_gtid(PMTBundle* p)
-{
-    int gtid1 = get_bits(p->word[0], 0, 16);
-    int gtid2 = get_bits(p->word[2], 12, 4);
-    int gtid3 = get_bits(p->word[2], 28, 4);
-    return (gtid1 + (gtid2<<16) + (gtid3<<20));
 }
 
