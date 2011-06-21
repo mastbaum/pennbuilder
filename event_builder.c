@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <pthread.h>
+#include <jemalloc/jemalloc.h>
 #include "listener.h"
 #include "ds.h"
 
@@ -14,7 +15,9 @@
  *  Andy Mastbaum (mastbaum@hep.upenn.edu), June 2011
  */ 
  
-Buffer* b;
+Buffer* event_buffer;
+Buffer* event_header_buffer;
+Buffer* run_header_buffer;
 
 int main(int argc, char *argv[])
 {
@@ -26,7 +29,9 @@ int main(int argc, char *argv[])
     else
         port = atoi(argv[1]);
 
-    buffer_alloc(&b);
+    buffer_alloc(&event_buffer, 2000);
+    buffer_alloc(&event_header_buffer, 50);
+    buffer_alloc(&run_header_buffer, 20);
 
     pthread_t tlistener;
     pthread_create(&tlistener, NULL, listener, (void*)&port);
@@ -37,9 +42,18 @@ int main(int argc, char *argv[])
     pthread_join(tlistener, NULL);
     //pthread_join(tshipper, NULL);
 
-    buffer_status(b);
-    buffer_clear(b);
-    free(b);
+    buffer_status(event_buffer);
+    buffer_clear(event_buffer);
+    free(event_buffer);
+
+    buffer_status(event_header_buffer);
+    buffer_clear(event_header_buffer);
+    free(event_header_buffer);
+
+    buffer_status(run_header_buffer);
+    buffer_clear(run_header_buffer);
+    free(run_header_buffer);
+
     return 0;
 }
 

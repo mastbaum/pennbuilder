@@ -57,14 +57,19 @@ int main(int argc, char *argv[])
     int ipmt, igtid;
     for(igtid=0; igtid<3; igtid++)
         for(ipmt=0; ipmt<5; ipmt++) {
+            XL3Packet* xl3p = malloc(sizeof(XL3Packet));
+            xl3p->header.type = 0;
+            xl3p->cmdHeader.num_bundles = 1;
+
             PMTBundle b;
-            b.gtid = igtid;
-            b.pmtid = ipmt;
             b.word[0] = 12345;
             b.word[1] = 65535;
             b.word[2] = ipmt;
 
-            n = send(sockfd, &b, sizeof(PMTBundle), 0);
+            PMTBundle* a = (PMTBundle*) &(xl3p->payload);
+            *a = b;
+
+            n = send(sockfd, xl3p, sizeof(XL3Packet), 0);
             if (n < 0) {
                 error("ERROR writing to socket");
                 break;

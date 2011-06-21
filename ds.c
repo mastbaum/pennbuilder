@@ -2,8 +2,9 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <pthread.h>
+#include <jemalloc/jemalloc.h>
 #include "ds.h"
-#include "jemalloc/jemalloc.h"
 
 void pmtbundle_print(PMTBundle* p)
 {
@@ -15,19 +16,19 @@ void pmtbundle_print(PMTBundle* p)
         printf("  word%i =  %u:\n", i, p->word[i]);
 }
 
-Buffer* buffer_alloc(Buffer** pb)
+Buffer* buffer_alloc(Buffer** pb, int size)
 {
-    int sz = sizeof(Buffer);
-    *pb = malloc(sz);
-    if(*pb)
-    {
-        printf("Initializing buffer: keys[%d] (%d)\n", BUFFER_SIZE, sz);
-        memset(*pb, 0, sizeof(Buffer));
-        (*pb)->size = BUFFER_SIZE;
+    *pb = malloc(sizeof(Buffer));
+    (*pb)->keys = malloc(size * sizeof(void*));
+    int mem_allocated = sizeof(Buffer) + size * sizeof(void*);
+    if(*pb) {
+        printf("Initializing buffer: keys[%d] (%d)\n", size, mem_allocated);
+        bzero(*pb, sizeof(*pb));
+        (*pb)->size = size;
         (*pb)->end = 0;
         (*pb)->start  = 0;
         (*pb)->offset = 0;
-        (*pb)->mutex = PTHREAD_MUTEX_INITIALIZER;
+        pthread_mutex_init(&((*pb)->mutex), NULL);
     }
     return *pb;
 }
@@ -65,7 +66,7 @@ int buffer_pop(Buffer* b, RecordType* type, void** pk)
         (*pk) = b->keys[b->start];
         pthread_mutex_lock(&(b->mutex));
         if(*pk) {
-            (*type) = b->keys[b->start];
+            (*type) = b->type[b->start];
             free(b->keys[b->start]);
             b->keys[b->start] = NULL;
         }
@@ -90,7 +91,8 @@ void buffer_clear(Buffer* b)
     pthread_mutex_lock(&(b->mutex));
     int i;
     for(i=0; i<b->size; i++)
-        if(b->keys[i]) {
+        if(b->keys[i] != NULL) {
+            printf("keys[%i] = %p\n",i,b->keys[i]);
             free(b->keys[i]);
             b->keys[i] = NULL;
         }
@@ -123,7 +125,7 @@ int buffer_insert(Buffer* b, unsigned int id, RecordType type, void* pk)
             b->end %= b->size;
         }
         if(keyid < b->start) {
-            printf("buffer_insert: got record with id %i < read position %i\n", keyid, b->start);
+            printf("buffer_insert: got record with id %i < read position %lu\n", keyid, b->start);
             // received data for already-shipped event, do something
         }
         pthread_mutex_unlock(&(b->mutex));
@@ -131,5 +133,35 @@ int buffer_insert(Buffer* b, unsigned int id, RecordType type, void* pk)
     }
     else
         return 1;
+}
+
+// listener
+
+PacketType packet_id(int* packet) {
+    PacketHeader* h = (PacketHeader*) packet;
+    return h->type;
+}
+
+int get_bits(int x, int position, int count)
+{
+  int shifted = x >> position;
+  int mask = ((uint64_t)1 << count) - 1;
+  return shifted & mask;
+}
+
+uint32_t pmtbundle_pmtid(PMTBundle* p)
+{
+    int ichan = get_bits(p->word[0], 16, 5);
+    int icard = get_bits(p->word[0], 26, 4);
+    int icrate = get_bits(p->word[0], 21, 5);
+    return (512*icrate + 32*icard + ichan);
+}
+
+uint32_t pmtbundle_gtid(PMTBundle* p)
+{
+    int gtid1 = get_bits(p->word[0], 0, 16);
+    int gtid2 = get_bits(p->word[2], 12, 4);
+    int gtid3 = get_bits(p->word[2], 28, 4);
+    return (gtid1 + (gtid2<<16) + (gtid3<<20));
 }
 

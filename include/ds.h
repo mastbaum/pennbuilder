@@ -145,18 +145,44 @@ typedef struct
     uint64_t start;
     uint64_t offset; // index-gtid offset (first gtid)
     uint64_t size;
-    void* keys[BUFFER_SIZE];
-    char type[BUFFER_SIZE];
+    void** keys;
+    RecordType* type;
     pthread_mutex_t mutex;
 } Buffer;
  
-Buffer* buffer_alloc(Buffer** pb);
+Buffer* buffer_alloc(Buffer** pb, int size);
 int buffer_isfull(Buffer* b);
 int buffer_isempty(Buffer* b);
-int buffer_push(Buffer* b, void* key);
-int buffer_pop(Buffer* b, void* pk);
+int buffer_push(Buffer* b, RecordType type, void* key);
+int buffer_pop(Buffer* b, RecordType* type, void** pk);
 void buffer_status(Buffer* b);
 void buffer_clear(Buffer* b);
-int buffer_at(Buffer* b, unsigned int id, char* type, void** pk);
-int buffer_insert(Buffer* b, unsigned int id, char type, void* pk);
+int buffer_at(Buffer* b, unsigned int id, RecordType* type, void** pk);
+int buffer_insert(Buffer* b, unsigned int id, RecordType type, void* pk);
+
+//listener
+
+#define XL3_MAXPAYLOADSIZE_BYTES 1400
+
+typedef enum { PMTBUNDLE } PacketType;
+
+typedef struct
+{
+    char type;
+} PacketHeader;
+
+typedef struct
+{
+  uint16_t packet_num;
+  uint8_t packet_type;
+  uint8_t num_bundles;
+} XL3_CommandHeader;
+
+typedef struct
+{
+  PacketHeader header;
+  XL3_CommandHeader cmdHeader;
+  char payload[XL3_MAXPAYLOADSIZE_BYTES];
+} XL3Packet;
+
 

@@ -10,7 +10,9 @@
 #include "listener.h"
 #include "ds.h"
 
-extern Buffer* b;
+extern Buffer* event_buffer;
+extern Buffer* event_header_buffer;
+extern Buffer* run_header_buffer;
 
 void close_sockets()
 {
@@ -25,11 +27,21 @@ void handler(int signal)
     if(signal == SIGINT) {
         printf("\nCaught CTRL-C (SIGINT), Exiting...\n");
         close_sockets();
-        if(!buffer_isempty(b)) {
-            printf("Warning: exiting with non-empty buffer\n");
-            buffer_status(b);
+        if(!buffer_isempty(event_buffer)) {
+            printf("Warning: exiting with non-empty event buffer\n");
+            buffer_status(event_buffer);
         }
-        buffer_clear(b);
+        if(!buffer_isempty(event_header_buffer)) {
+            printf("Warning: exiting with non-empty event header buffer\n");
+            buffer_status(event_header_buffer);
+        }
+        if(!buffer_isempty(run_header_buffer)) {
+            printf("Warning: exiting with non-empty run header buffer\n");
+            buffer_status(run_header_buffer);
+        }
+        buffer_clear(event_buffer);
+        buffer_clear(event_header_buffer);
+        buffer_clear(run_header_buffer);
         exit(0);
     }
     else
@@ -45,12 +57,12 @@ void die(const char *msg)
 void* listener_child(void* psock)
 {
     int sock = *((int*) psock);
-    int BUFFER_LEN = sizeof(Event); // maximum size
-    PacketHeader* packet_buffer = malloc(BUFFER_LEN);
+    int MAX_BUFFER_LEN = sizeof(Event); // maximum size
+    void* packet_buffer = malloc(MAX_BUFFER_LEN);
 
     while(1) {
-        memset(packet_buffer, 0, BUFFER_LEN);
-        int r = recv(sock, packet_buffer, BUFFER_LEN, 0);
+        memset(packet_buffer, 0, MAX_BUFFER_LEN);
+        int r = recv(sock, packet_buffer, MAX_BUFFER_LEN, 0);
         if(r<0) {
             die("ERROR reading from socket");
             break;
@@ -60,31 +72,43 @@ void* listener_child(void* psock)
             break;
         }
         else {
-            //continue;
-            //printf("Received PMTBundle on socket %i\n", sock);
-            // determine packet type
-            char packet_type = packet_buffer->;
-            if(packet_type == EVENT) { //switch
-                Event* e = (Event*) packet_buffer;                
-            }
-/*
-            void* p;
-            RecordType r;
-            buffer_at(b, p.gtid, &r, &p);
-            pthread_mutex_t m = b->mutex;
-            if(r == EVENT) { // switch
-                Event* e = (Event*) p;
-                pthread_mutex_lock(&(b->mutex));
-                if(e == NULL) {
-                    e = malloc(sizeof(Event));
-                    e->pmt[p.pmtid] = p;
-                    buffer_insert(b, p.gtid, r, e);
+            PacketType packet_type = packet_id(packet_buffer);
+            printf("got packet of type %i\n", packet_type);
+            if(packet_type == PMTBUNDLE) {
+                XL3Packet* p = realloc(packet_buffer, sizeof(XL3Packet));
+                // fixme: check packet type to ensure megabundle
+                int nbundles = p->cmdHeader.num_bundles;
+                printf("xl3 packet with %i bundles\n", nbundles);
+                int ibundle;
+                for(ibundle=0; ibundle<nbundles; ibundle++) {
+                    PMTBundle* pmtb = (PMTBundle*) &(p->payload[ibundle]); // errrrrrm?
+                    uint32_t gtid = pmtbundle_gtid(pmtb);
+                    uint32_t pmtid = pmtbundle_pmtid(pmtb);
+                    Event* e;
+                    RecordType r;
+                    buffer_at(event_buffer, gtid, &r, (void*)&e);
+                    if(e == NULL) {
+                        pthread_mutex_lock(&(event_buffer->mutex));
+                        e = malloc(sizeof(Event));
+                        buffer_insert(event_buffer, gtid, DETECTOR_EVENT, (int*)e);
+                        pthread_mutex_unlock(&(event_buffer->mutex));
+                    }
+                    e->pmt[pmtid] = *pmtb;                    
                 }
-                else {
-                    e->pmt[p.pmtid] = p;
-                }
+            //case MTCINFO: break;
+            //case CAENINFO: break;
+            //case TRIG: break;
+            //case EPED: break;
+            //case RHDR: break;
+            //case CAST: break;
+            //case CAAC: break;
+            //default:
             }
-*/
+            else {
+                printf("unknown packet type\n");
+                // do something
+                break;
+            }
         }
     }
 }
