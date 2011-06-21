@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -44,12 +45,12 @@ void die(const char *msg)
 void* listener_child(void* psock)
 {
     int sock = *((int*) psock);
-    int BUFFER_LEN = sizeof(PMTBundle);
-    PMTBundle p;
+    int BUFFER_LEN = sizeof(Event); // maximum size
+    PacketHeader* packet_buffer = malloc(BUFFER_LEN);
 
     while(1) {
-        memset(&p, 0, BUFFER_LEN);
-        int r = recv(sock, &p, BUFFER_LEN, 0);
+        memset(packet_buffer, 0, BUFFER_LEN);
+        int r = recv(sock, packet_buffer, BUFFER_LEN, 0);
         if(r<0) {
             die("ERROR reading from socket");
             break;
@@ -61,19 +62,29 @@ void* listener_child(void* psock)
         else {
             //continue;
             //printf("Received PMTBundle on socket %i\n", sock);
-            pmtbundle_print(&p);
-            Event* e;
-            buffer_at(b, p.gtid, &e);
+            // determine packet type
+            char packet_type = packet_buffer->;
+            if(packet_type == EVENT) { //switch
+                Event* e = (Event*) packet_buffer;                
+            }
+/*
+            void* p;
+            RecordType r;
+            buffer_at(b, p.gtid, &r, &p);
             pthread_mutex_t m = b->mutex;
-            pthread_mutex_lock(&m);
-            if(e == NULL) {
-                e = malloc(sizeof(Event));
-                e->pmt[p.pmtid] = p;
-                buffer_insert(b, p.gtid, e);
+            if(r == EVENT) { // switch
+                Event* e = (Event*) p;
+                pthread_mutex_lock(&(b->mutex));
+                if(e == NULL) {
+                    e = malloc(sizeof(Event));
+                    e->pmt[p.pmtid] = p;
+                    buffer_insert(b, p.gtid, r, e);
+                }
+                else {
+                    e->pmt[p.pmtid] = p;
+                }
             }
-            else {
-                e->pmt[p.pmtid] = p;
-            }
+*/
         }
     }
 }

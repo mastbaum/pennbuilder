@@ -1,8 +1,5 @@
 #include <pthread.h>
-
-typedef unsigned long uint64_t; 
-typedef unsigned int uint32_t;
-typedef unsigned short uint16_t;
+#include <stdint.h>
 
 #define NPMTS 10000
 
@@ -27,32 +24,27 @@ typedef struct
 /// CAENData contains digitized trigger sums for up to 8 channels (12.8k bits)
 typedef struct
 {
-    // 100 samples * 12 bits * 8 channels
-    uint16_t data[8][100];
+    uint32_t header[4];
+    uint32_t data[8][55]; // v1720 packs data like so (2.5 samples/word)
 } CAENData;
 
 /// Event contains all data for SNO+ event. (973k bits = 120 KB)
 /// At 120 KB/event, a PC with 24GB of RAM can store 200000 events in memory
 typedef struct
 {
-    short type;
-    PMTBundle pmt[NPMTS]; // using a pointer array saves space for nhit < 3333
+    PMTBundle pmt[NPMTS];
     MTCData mtc;
     CAENData caen;
     uint32_t run_id;
     uint32_t subrun_id;
     uint32_t nhits;
-    uint32_t evorder; //?
+    uint32_t evorder;
     uint64_t runmask;
     char pack_ver;
     char mcflag;
-    char datatype; //?
-    char clockstat; //?
-
-    pthread_mutex_t mutex; // get me out of here!
+    char datatype;
+    char clockstat;
 } Event;
-
-void event_clear(Event* e);
 
 typedef struct
 {
@@ -131,18 +123,21 @@ typedef struct
 
 /** Ring FIFO buffer
  *
- *  Based on example found at 
- *  http://en.wikipedia.org/wiki/Circular_buffer.
+ *  Data (keys) stored as void*, type given in field type, as defined in enum
+ *  RecordType.
+ *
+ *  Based on example found at http://en.wikipedia.org/wiki/Circular_buffer.
  */
 
-// record types
-#define EMPTY 0
-#define DETECTOR_EVENT 1
-#define RUN_HEADER 2
-#define AV_STATUS_HEADER 3
-#define MANIPULATOR_STATUS_HEADER 4
-#define TRIG_BANK_HEADER 5
-#define EPED_BANK_HEADER 6
+typedef enum {
+    EMPTY,
+    DETECTOR_EVENT,
+    RUN_HEADER,
+    AV_STATUS_HEADER,
+    MANIPULATOR_STATUS_HEADER,
+    TRIG_BANK_HEADER,
+    EPED_BANK_HEADER
+} RecordType;
 
 typedef struct
 {
