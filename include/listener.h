@@ -1,4 +1,5 @@
 #define NUM_THREADS 20
+#define MAX_BUFFER_LEN 1444
 #define XL3_MAXPAYLOADSIZE_BYTES 1400
 
 int sockfd, thread_sockfd[NUM_THREADS];

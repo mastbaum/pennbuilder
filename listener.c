@@ -57,7 +57,6 @@ void die(const char *msg)
 void* listener_child(void* psock)
 {
     int sock = *((int*) psock);
-    int MAX_BUFFER_LEN = sizeof(Event); // maximum size
     void* packet_buffer = malloc(MAX_BUFFER_LEN);
 
     signal(SIGINT, &handler);
