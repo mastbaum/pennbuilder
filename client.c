@@ -63,7 +63,7 @@ int main(int argc, char *argv[])
             xl3p->cmdHeader.num_bundles = 1;
 
             PMTBundle b;
-            b.word[0] = 12345;
+            b.word[0] = 0;
             b.word[1] = 65535;
             b.word[2] = ipmt;
 

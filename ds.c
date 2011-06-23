@@ -43,7 +43,8 @@ Buffer* buffer_alloc(Buffer** pb, int size)
 {
     *pb = malloc(sizeof(Buffer));
     (*pb)->keys = malloc(size * sizeof(void*));
-    int mem_allocated = sizeof(Buffer) + size * sizeof(void*);
+    (*pb)->type = malloc(size * sizeof(RecordType));
+    int mem_allocated = sizeof(Buffer) + size * (sizeof(void*) + sizeof(RecordType));
     if(*pb) {
         printf("Initializing buffer: keys[%d] (%d)\n", size, mem_allocated);
         bzero(*pb, sizeof(*pb));
@@ -139,7 +140,8 @@ int buffer_at(Buffer* b, unsigned int id, RecordType* type, void** pk)
 int buffer_insert(Buffer* b, unsigned int id, RecordType type, void* pk)
 {
     int keyid = (id - b->offset) % b->size;
-    if (!b->keys[keyid] && (keyid < b->size)) {
+    if (keyid < b->size) {
+        printf("inserting into buffer, type %i\n", (int)type);
         pthread_mutex_lock(&(b->mutex));
         b->type[keyid] = type;
         b->keys[keyid] = pk;

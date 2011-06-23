@@ -39,9 +39,9 @@ void handler(int signal)
             printf("Warning: exiting with non-empty run header buffer\n");
             buffer_status(run_header_buffer);
         }
-        buffer_clear(event_buffer);
-        buffer_clear(event_header_buffer);
-        buffer_clear(run_header_buffer);
+        //buffer_clear(event_buffer);
+        //buffer_clear(event_header_buffer);
+        //buffer_clear(run_header_buffer);
         exit(0);
     }
     else
@@ -60,6 +60,7 @@ void* listener_child(void* psock)
     int MAX_BUFFER_LEN = sizeof(Event); // maximum size
     void* packet_buffer = malloc(MAX_BUFFER_LEN);
 
+    signal(SIGINT, &handler);
     while(1) {
         memset(packet_buffer, 0, MAX_BUFFER_LEN);
         int r = recv(sock, packet_buffer, MAX_BUFFER_LEN, 0);
@@ -84,16 +85,24 @@ void* listener_child(void* psock)
                     PMTBundle* pmtb = (PMTBundle*) &(p->payload[ibundle]); // errrrrrm?
                     uint32_t gtid = pmtbundle_gtid(pmtb);
                     uint32_t pmtid = pmtbundle_pmtid(pmtb);
+                    printf("gtid = %i, pmtid = %i\n", gtid, pmtid);
                     Event* e;
+        printf("wtf1\n");
                     RecordType r;
                     buffer_at(event_buffer, gtid, &r, (void*)&e);
                     if(e == NULL) {
-                        pthread_mutex_lock(&(event_buffer->mutex));
+        printf("wtf2\n");
+        printf("wtf3\n");
                         e = malloc(sizeof(Event));
+        printf("wtf4\n");
                         buffer_insert(event_buffer, gtid, DETECTOR_EVENT, (int*)e);
-                        pthread_mutex_unlock(&(event_buffer->mutex));
+        printf("wtf5\n");
                     }
+                        pthread_mutex_lock(&(event_buffer->mutex));
                     e->pmt[pmtid] = *pmtb;                    
+                        pthread_mutex_unlock(&(event_buffer->mutex));
+        printf("wtf6\n");
+        buffer_status(event_buffer);
                 }
             //case MTCINFO: break;
             //case CAENINFO: break;
