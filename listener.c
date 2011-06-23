@@ -74,18 +74,18 @@ void* listener_child(void* psock)
         else {
             PacketType packet_type = ((PacketHeader*) packet_buffer)->type;
             printf("got packet of type %i\n", packet_type);
+            printf("it looks like this:\n");
+            int i;
+            uint32_t* pp = ((uint32_t*) packet_buffer);
+            for(i=0; i<4; i++) {
+               printf("%i: %x\n", i, *pp);
+               pp++;
+            }
             if(packet_type == PMTBUNDLE) {
                 XL3Packet* p = realloc(packet_buffer, sizeof(XL3Packet));
                 // fixme: check packet type to ensure megabundle
                 int nbundles = p->cmdHeader.num_bundles;
                 printf("xl3 packet with %i bundles\n", nbundles);
-                printf("it looks like thiis:\n");
-                int i;
-                uint32_t* pp = ((uint32_t*) packet_buffer);
-                for(i=0; i<4; i++) {
-                   printf("%i: %x\n", i, *pp);
-                   pp++;
-                }
                 int ibundle;
                 PMTBundle* pmtb = (PMTBundle*) (p->payload); // errrrrrm?
                 for(ibundle=0; ibundle<nbundles; ibundle++) {

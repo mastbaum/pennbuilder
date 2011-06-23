@@ -13,7 +13,7 @@ typedef enum { PMTBUNDLE } PacketType;
 
 typedef struct
 {
-    char type;
+    uint16_t type;
 } PacketHeader;
 
 typedef struct
