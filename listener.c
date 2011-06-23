@@ -87,21 +87,15 @@ void* listener_child(void* psock)
                     uint32_t pmtid = pmtbundle_pmtid(pmtb);
                     printf("gtid = %i, pmtid = %i\n", gtid, pmtid);
                     Event* e;
-        printf("wtf1\n");
                     RecordType r;
                     buffer_at(event_buffer, gtid, &r, (void*)&e);
                     if(e == NULL) {
-        printf("wtf2\n");
-        printf("wtf3\n");
                         e = malloc(sizeof(Event));
-        printf("wtf4\n");
                         buffer_insert(event_buffer, gtid, DETECTOR_EVENT, (int*)e);
-        printf("wtf5\n");
                     }
                         pthread_mutex_lock(&(event_buffer->mutex));
                     e->pmt[pmtid] = *pmtb;                    
                         pthread_mutex_unlock(&(event_buffer->mutex));
-        printf("wtf6\n");
         buffer_status(event_buffer);
                 }
             //case MTCINFO: break;
