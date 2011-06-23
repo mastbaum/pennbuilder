@@ -13,6 +13,7 @@
 extern Buffer* event_buffer;
 extern Buffer* event_header_buffer;
 extern Buffer* run_header_buffer;
+extern uint32_t last_gtid[NUM_PMTS];
 
 void close_sockets()
 {
@@ -80,11 +81,16 @@ void* listener_child(void* psock)
                 for(ibundle=0; ibundle<nbundles; ibundle++) {
                     uint32_t gtid = pmtbundle_gtid(pmtb) + p->cmdHeader.packet_num;
                     uint32_t pmtid = pmtbundle_pmtid(pmtb);
+                    if(gtid > last_gtid[pmtid])
+                        last_gtid[pmtid] = gtid;
+                    else
+                        printf("GTID %i for PMT %i received out of order.\n", gtid, pmtid);
                     Event* e;
                     RecordType r;
                     buffer_at(event_buffer, gtid, &r, (void*)&e);
                     if(e == NULL) {
                         e = malloc(sizeof(Event));
+                        e->gtid = gtid;
                         buffer_insert(event_buffer, gtid, DETECTOR_EVENT, (int*)e);
                     }
                     pthread_mutex_lock(&(event_buffer->mutex));

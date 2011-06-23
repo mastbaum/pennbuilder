@@ -18,6 +18,7 @@
 Buffer* event_buffer;
 Buffer* event_header_buffer;
 Buffer* run_header_buffer;
+uint32_t last_gtid[NUM_PMTS];
 
 int main(int argc, char *argv[])
 {
@@ -37,7 +38,7 @@ int main(int argc, char *argv[])
     pthread_create(&tlistener, NULL, listener, (void*)&port);
 
     pthread_t tshipper;
-    pthread_create(&tshipper, NULL, sender, NULL);
+    pthread_create(&tshipper, NULL, shipper, NULL);
 
     pthread_join(tlistener, NULL);
     pthread_join(tshipper, NULL);

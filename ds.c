@@ -91,7 +91,6 @@ int buffer_pop(Buffer* b, RecordType* type, void** pk)
         pthread_mutex_lock(&(b->mutex));
         if(*pk) {
             (*type) = b->type[b->start];
-            free(b->keys[b->start]);
             b->keys[b->start] = NULL;
         }
         b->start++; // note: you can pop a NULL pointer off the end

@@ -35,6 +35,7 @@ typedef struct
     PMTBundle pmt[NPMTS];
     MTCData mtc;
     CAENData caen;
+    uint32_t gtid;
     uint32_t run_id;
     uint32_t subrun_id;
     uint32_t nhits;
