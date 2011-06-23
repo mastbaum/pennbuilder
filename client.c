@@ -116,12 +116,14 @@ int main(int argc, char *argv[])
 	xl3  = (PMTBundle *) malloc(304*PER_FEC*sizeof(PMTBundle));
 	xl3ptr = 0;
 	int done = 0;
+	int tot_num_events = 0;
 	while(done == 0){
 
 		// lets read in and buffer up a random number of events
 		int num_events = rand()%10+1;
 		for (i=0;i<num_events;i++){
 			if (fgets(ibuf,10000,infile)){
+				tot_num_events++;
 				words = strtok(ibuf, " ");
 				PMTBundle temp_bundle;
 				int num_hits = atoi(words);
@@ -222,11 +224,14 @@ int main(int argc, char *argv[])
 	free(xl3);
 
 	//now we send packets forever
+	j = 0;
 	while(1){
 		for(i=0;i<ipckt;i++){
+			xl3switch[i].cmdHeader.packet_num = j*tot_num_events;
 			num_bundles = xl3switch[i].cmdHeader.num_bundles;
             n = send(sockfd, &xl3switch[i], MAX_BUFFER_LEN, 0);
 		}
+		j++;
 	}
 	free(xl3switch);
 
