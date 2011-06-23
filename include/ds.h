@@ -8,12 +8,12 @@
 /// PMTBundle contains raw PMT data packed into 3 32-bit words (96 bits)
 typedef struct
 {
-    int pmtid; // cheat for testing
-    int gtid;
     uint32_t word[3];
 } PMTBundle;
 
 void pmtbundle_print(PMTBundle* p);
+uint32_t pmtbundle_pmtid(PMTBundle* p);
+uint32_t pmtbundle_gtid(PMTBundle* p);
 
 /// MTCData contains trigger information. Format unknown AToW. (192 bits)
 typedef struct

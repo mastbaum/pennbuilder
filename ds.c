@@ -16,8 +16,8 @@ int get_bits(int x, int position, int count)
 void pmtbundle_print(PMTBundle* p)
 {
     printf("PMTBundle at %p:\n", p);
-    printf("  pmtid =  %i:\n", p->pmtid);
-    printf("  gtid  =  %i:\n", p->gtid);
+    printf("  pmtid =  %i:\n", pmtbundle_pmtid(p));
+    printf("  gtid  =  %i:\n", pmtbundle_gtid(p));
     int i;
     for(i=0; i<3; i++)
         printf("  word%i =  %u:\n", i, p->word[i]);
