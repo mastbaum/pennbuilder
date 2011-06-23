@@ -36,11 +36,11 @@ int main(int argc, char *argv[])
     pthread_t tlistener;
     pthread_create(&tlistener, NULL, listener, (void*)&port);
 
-    //pthread_t tshipper;
-    //pthread_create(&tshipper, NULL, ship, NULL);
+    pthread_t tshipper;
+    pthread_create(&tshipper, NULL, sender, NULL);
 
     pthread_join(tlistener, NULL);
-    //pthread_join(tshipper, NULL);
+    pthread_join(tshipper, NULL);
 
     buffer_status(event_buffer);
     buffer_clear(event_buffer);
