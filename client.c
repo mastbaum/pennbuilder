@@ -219,25 +219,16 @@ int main(int argc, char *argv[])
 		ibndl+=num_bundles;
 	}
 
+	free(xl3);
+
 	//now we send packets forever
 	while(1){
 		for(i=0;i<ipckt;i++){
-			for (j=0;j<20;j++){
-				printf("%02x ",*(((uint8_t *) &xl3switch[i])+j));
-			}
-			printf("\n");
-			//printf("packet %d, type %d\n",i,xl3switch[i].header.type);
 			num_bundles = xl3switch[i].cmdHeader.num_bundles;
-			PMTBundle *temp_bundle;
-			temp_bundle = (PMTBundle *) xl3switch[i].payload;
-			for (ibndl=0;ibndl<num_bundles;ibndl++){
-				gtid = pmtbundle_gtid(temp_bundle); 
-			//	printf("packet %d, bundle %d, id: %d, pmtid: %d\n",i,ibndl,gtid,pmtbundle_pmtid(temp_bundle));
-				temp_bundle++;
-			}
             n = send(sockfd, &xl3switch[i], MAX_BUFFER_LEN, 0);
 		}
 	}
+	free(xl3switch);
 
    
     close(sockfd);
