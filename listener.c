@@ -91,7 +91,7 @@ void* listener_child(void* psock)
                     e->pmt[pmtid] = *pmtb;
                     e->nhits++;
                     pthread_mutex_unlock(&(event_buffer->mutex));
-                    buffer_status(event_buffer);
+                    //buffer_status(event_buffer);
                     pmtb++;
                 }
             //case MTCINFO: break;
