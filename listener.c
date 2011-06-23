@@ -39,9 +39,6 @@ void handler(int signal)
             printf("Warning: exiting with non-empty run header buffer\n");
             buffer_status(run_header_buffer);
         }
-        //buffer_clear(event_buffer);
-        //buffer_clear(event_header_buffer);
-        //buffer_clear(run_header_buffer);
         exit(0);
     }
     else
@@ -64,35 +61,25 @@ void* listener_child(void* psock)
         memset(packet_buffer, 0, MAX_BUFFER_LEN);
         int r = recv(sock, packet_buffer, MAX_BUFFER_LEN, 0);
         if(r<0) {
-            die("ERROR reading from socket");
+            die("Error reading from socket");
             break;
         }
         else if(r==0) {
-            printf("Client terminated connection...\n");
+            printf("Client terminated connection on socket %i\n", sock);
             break;
         }
         else {
             PacketType packet_type = ((PacketHeader*) packet_buffer)->type;
-            printf("got packet of type %i\n", packet_type);
-            printf("it looks like this:\n");
-            int i;
-            uint32_t* pp = ((uint32_t*) packet_buffer);
-			int j;
-			for (j=0;j<20;j++){
-				printf("%02x ",*(((uint8_t *) packet_buffer)+j));
-			}
-			printf("\n");
+            printf("Recieved packet of type %i on socket %i\n", packet_type, sock);
             if(packet_type == PMTBUNDLE) {
                 XL3Packet* p = realloc(packet_buffer, sizeof(XL3Packet));
                 // fixme: check packet type to ensure megabundle
                 int nbundles = p->cmdHeader.num_bundles;
-                printf("xl3 packet %p %p %p with %i bundles\n", p,&(p->cmdHeader.packet_type),&(p->cmdHeader.packet_num),nbundles);
                 int ibundle;
-                PMTBundle* pmtb = (PMTBundle*) (p->payload); // errrrrrm?
+                PMTBundle* pmtb = (PMTBundle*) (p->payload);
                 for(ibundle=0; ibundle<nbundles; ibundle++) {
-                    uint32_t gtid = pmtbundle_gtid(pmtb);
+                    uint32_t gtid = pmtbundle_gtid(pmtb) + p->cmdHeader.packet_num;
                     uint32_t pmtid = pmtbundle_pmtid(pmtb);
-                    printf("gtid = %i, pmtid = %i\n", gtid, pmtid);
                     Event* e;
                     RecordType r;
                     buffer_at(event_buffer, gtid, &r, (void*)&e);
@@ -101,7 +88,8 @@ void* listener_child(void* psock)
                         buffer_insert(event_buffer, gtid, DETECTOR_EVENT, (int*)e);
                     }
                     pthread_mutex_lock(&(event_buffer->mutex));
-                    e->pmt[pmtid] = *pmtb;                    
+                    e->pmt[pmtid] = *pmtb;
+                    e->nhits++;
                     pthread_mutex_unlock(&(event_buffer->mutex));
                     buffer_status(event_buffer);
                     pmtb++;
@@ -116,7 +104,7 @@ void* listener_child(void* psock)
             //default:
             }
             else {
-                printf("unknown packet type\n");
+                printf("Unknown packet type %i on socket %i\n", packet_type, sock);
                 // do something
                 break;
             }

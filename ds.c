@@ -141,7 +141,6 @@ int buffer_insert(Buffer* b, unsigned int id, RecordType type, void* pk)
 {
     int keyid = (id - b->offset) % b->size;
     if (keyid < b->size) {
-        printf("inserting into buffer, type %i\n", (int)type);
         pthread_mutex_lock(&(b->mutex));
         b->type[keyid] = type;
         b->keys[keyid] = pk;
