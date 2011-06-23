@@ -80,8 +80,8 @@ void* listener_child(void* psock)
                 int nbundles = p->cmdHeader.num_bundles;
                 printf("xl3 packet with %i bundles\n", nbundles);
                 int ibundle;
+                PMTBundle* pmtb = (PMTBundle*) (p->payload); // errrrrrm?
                 for(ibundle=0; ibundle<nbundles; ibundle++) {
-                    PMTBundle* pmtb = (PMTBundle*) &(p->payload[ibundle]); // errrrrrm?
                     uint32_t gtid = pmtbundle_gtid(pmtb);
                     uint32_t pmtid = pmtbundle_pmtid(pmtb);
                     printf("gtid = %i, pmtid = %i\n", gtid, pmtid);
@@ -92,10 +92,11 @@ void* listener_child(void* psock)
                         e = malloc(sizeof(Event));
                         buffer_insert(event_buffer, gtid, DETECTOR_EVENT, (int*)e);
                     }
-                        pthread_mutex_lock(&(event_buffer->mutex));
+                    pthread_mutex_lock(&(event_buffer->mutex));
                     e->pmt[pmtid] = *pmtb;                    
-                        pthread_mutex_unlock(&(event_buffer->mutex));
-        buffer_status(event_buffer);
+                    pthread_mutex_unlock(&(event_buffer->mutex));
+                    buffer_status(event_buffer);
+                    pmtb++;
                 }
             //case MTCINFO: break;
             //case CAENINFO: break;
