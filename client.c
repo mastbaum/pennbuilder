@@ -155,6 +155,7 @@ int main(int argc, char *argv[])
 			}
 		} // end loop over events being buffered
 
+
 		// now lets do some readout
 		uint16_t slot_mask;
 		uint32_t crate_mask;
@@ -189,7 +190,7 @@ int main(int argc, char *argv[])
 			} // loop over crates
 		} // loop until all empty
 	} // keep doin more events until done
-	
+
 	// ok we are done with the fec buffers
 	for (i=0;i<304;i++){
 		free(fecs[i]);
@@ -216,9 +217,9 @@ int main(int argc, char *argv[])
 			temp_bundle->word[1] = xl3[ibndl].word[1];
 			temp_bundle->word[2] = xl3[ibndl].word[2];
 			temp_bundle++;
+			ibndl++;
 		}
 		ipckt++;
-		ibndl+=num_bundles;
 	}
 
 	free(xl3);
@@ -227,16 +228,25 @@ int main(int argc, char *argv[])
 	j = 0;
 	while(1){
 		for(i=0;i<ipckt;i++){
-			xl3switch[i].cmdHeader.packet_num = j*tot_num_events;
+			int extra_gtid = (j*tot_num_events)%0xFFFFFF;
+			xl3switch[i].cmdHeader.packet_num = extra_gtid&0xFFFF;
+			xl3switch[i].cmdHeader.packet_type = (extra_gtid&0xFF0000)>>16;
+			printf("packet %d: %d, %d, %d\n",i,xl3switch[i].header.type,xl3switch[i].cmdHeader.num_bundles,xl3switch[i].cmdHeader.packet_num);
 			num_bundles = xl3switch[i].cmdHeader.num_bundles;
-            n = send(sockfd, &xl3switch[i], MAX_BUFFER_LEN, 0);
+			PMTBundle *temp_bundle;
+			temp_bundle = (PMTBundle *) xl3switch[i].payload;
+			for (k=0;k<num_bundles;k++){
+				printf("%08x %08x %08x, %d\n",temp_bundle->word[0],temp_bundle->word[1],temp_bundle->word[2],pmtbundle_pmtid(temp_bundle));
+				temp_bundle++;
+			}
+			n = send(sockfd, &xl3switch[i], MAX_BUFFER_LEN, 0);
 		}
 		j++;
 	}
 	free(xl3switch);
 
-   
-    close(sockfd);
-    return 0;
+
+	close(sockfd);
+	return 0;
 }
 
