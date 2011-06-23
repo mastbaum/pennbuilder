@@ -4,7 +4,6 @@
 #define XL3_MAXPAYLOADSIZE_BYTES (MEGASIZE*12) 
 #define MAX_BUFFER_LEN (XL3_MAXPAYLOADSIZE_BYTES+HEADER_LENGTH)
 
-void* sender(void* ptr);
 int sockfd, thread_sockfd[NUM_THREADS];
 void close_sockets();
 void handler(int signal);

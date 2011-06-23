@@ -13,7 +13,7 @@
 extern Buffer* event_buffer;
 extern Buffer* event_header_buffer;
 extern Buffer* run_header_buffer;
-extern uint32_t last_gtid[NUM_PMTS];
+extern uint32_t last_gtid[NPMTS];
 
 void close_sockets()
 {

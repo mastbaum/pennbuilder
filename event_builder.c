@@ -5,6 +5,7 @@
 #include <pthread.h>
 #include <jemalloc/jemalloc.h>
 #include "listener.h"
+#include "shipper.h"
 #include "ds.h"
 
 /** Event Builder for SNO+, C edition
@@ -18,7 +19,7 @@
 Buffer* event_buffer;
 Buffer* event_header_buffer;
 Buffer* run_header_buffer;
-uint32_t last_gtid[NUM_PMTS];
+uint32_t last_gtid[NPMTS];
 
 int main(int argc, char *argv[])
 {
