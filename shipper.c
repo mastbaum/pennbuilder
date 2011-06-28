@@ -33,7 +33,7 @@ void* shipper(void* ptr)
             while(((Event*) event_buffer->keys[event_buffer->start])->gtid <= min_gtid) {
                 Event* e;
                 RecordType r;
-                buffer_pop(event_buffer, &r, (void*)&e);
+            //    buffer_pop(event_buffer, &r, (void*)&e);
                 if(!e) {
                     printf("Sender ran out of buffer\n");
                     break;

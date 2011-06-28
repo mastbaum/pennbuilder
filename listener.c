@@ -79,12 +79,12 @@ void* listener_child(void* psock)
                 int ibundle;
                 PMTBundle* pmtb = (PMTBundle*) (p->payload);
                 for(ibundle=0; ibundle<nbundles; ibundle++) {
-                    uint32_t gtid = pmtbundle_gtid(pmtb) + p->cmdHeader.packet_num;
+                    uint32_t gtid = pmtbundle_gtid(pmtb) + p->cmdHeader.packet_num + p->cmdHeader.packet_type<<16;
                     uint32_t pmtid = pmtbundle_pmtid(pmtb);
-                    if(gtid > last_gtid[pmtid])
+                    if(gtid > last_gtid[pmtid] || gtid == 0)
                         last_gtid[pmtid] = gtid;
                     else
-                        printf("GTID %i for PMT %i received out of order.\n", gtid, pmtid);
+                        printf("GTID %u (%u) for PMT %i received out of order.\n", gtid, last_gtid[pmtid], pmtid);
                     Event* e;
                     RecordType r;
                     buffer_at(event_buffer, gtid, &r, (void*)&e);
