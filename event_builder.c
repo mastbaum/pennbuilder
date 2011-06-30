@@ -15,7 +15,9 @@
  *
  *  Andy Mastbaum (mastbaum@hep.upenn.edu), June 2011
  */ 
- 
+
+#define NCRATES 19
+
 Buffer* event_buffer;
 Buffer* event_header_buffer;
 Buffer* run_header_buffer;

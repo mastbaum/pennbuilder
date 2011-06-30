@@ -62,11 +62,55 @@ void accept_xl3packet(void* packet_buffer)
     PMTBundle* pmtb = (PMTBundle*) (p->payload);
     for(ibundle=0; ibundle<nbundles; ibundle++) {
         uint32_t gtid = pmtbundle_gtid(pmtb); // + p->cmdHeader.packet_num;
-        uint32_t pmtid = pmtbundle_pmtid(pmtb);
-        if(gtid < last_gtid[pmtid])
-            printf(""); //printf("GTID %i<=%i for PMT %i received out of order\n", gtid, last_gtid[pmtid], pmtid);
-        else
+        // FIXME: eliminiate function calls
+        uint32_t chan = get_bits(pmtb->word[0], 16, 5);
+        uint32_t card = get_bits(pmtb->word[0], 26, 4);
+        uint32_t crate = get_bits(pmtb->word[0], 21, 5);
+        uint32_t pmtid = 512*crate + 32*card + chan;
+
+        // if we have skipped a card twice, the entire crate must be finished
+        // up to the gtid that card was on last, and we can update the 
+        // last_gtid array.
+        if(card <= read_pos[crate]) {
+            int icard;
+            for(icard=0; icard<NFECS; icard++)
+                if((1<<icard) & crate_skipped[crate]) {
+                    uint32_t first_pmtid = 512*crate + 32*card;
+                    int ipmtid;
+                    for(ipmtid=first_pmtid; ipmtid<first_pmtid+32; ipmtid++) 
+                        last_gtid[ipmtid] = crate_gtid_last[crate];
+                    if(crate_gtid_current[crate] > crate_gtid_last[crate])
+                        crate_gtid_last[crate] = crate_gtid_current[crate];
+                    crate_skipped[crate] = 1<<card;
+                    read_pos[crate] = card;
+                }
+                if(gtid > crate_gtid_current[crate])
+                    crate_gtid_current[crate] = gtid;
+                crate_skipped[crate] |= 1<<card;
+                read_pos[crate] = card;
+        }
+
+        // similarly, look at sequencer skips
+        int last_chan = chan > seq_pos[crate][card] ? chan: chan + NCHANS;
+	if (crate==0 && card==0)
+           printf("seq at %d (id %d). Now at %d (id %d). Loop from %d to %d\n",seq_pos[crate][card],last_gtid[512*crate+32*card+seq_pos[crate][card]],chan,gtid,seq_pos[crate][card]+1,last_chan);
+        int ichan;
+        for(ichan=seq_pos[crate][card]+1; ichan<last_chan; ichan++) {
+            int ch = ichan % 32;
+            uint32_t ccid = 512*crate + 32*card;
+            last_gtid[ccid + ch] = last_gtid[ccid + seq_pos[crate][card]];
+            if (crate==0 && card==0)
+               printf("chan %d (%d) changed to %d\n",ch,ccid+ch,last_gtid[ccid+ch]);
+        }
+        seq_pos[crate][card] = chan;
+
+
+        if(gtid > last_gtid[pmtid])
             last_gtid[pmtid] = (uint32_t)gtid;
+        if (gtid < last_gtid[pmtid]){
+            printf("warning! %d was %d (< %d)\n",pmtid,gtid,last_gtid[pmtid]);
+            exit(1);
+        }
         Event* e;
         RecordType r;
         buffer_at(event_buffer, gtid, &r, (void*)&e);
@@ -133,6 +177,12 @@ void* listener_child(void* psock)
 
 void* listener(void* ptr)
 {
+    memset(&read_pos, 0, NCRATES * sizeof(uint16_t));
+    memset(&seq_pos, 0, NCRATES * NFECS * sizeof(uint32_t));
+    memset(&crate_gtid_current, 0, NCRATES * sizeof(uint32_t));
+    memset(&crate_gtid_last, 0, NCRATES * sizeof(uint32_t));
+    memset(&crate_skipped, 0, NCRATES * sizeof(uint16_t));
+
     int portno;
     socklen_t clilen;
     struct sockaddr_in serv_addr, cli_addr;
