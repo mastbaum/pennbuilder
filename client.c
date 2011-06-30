@@ -188,7 +188,7 @@ int main(int argc, char *argv[])
                 // each fec does its own sequencer readout loop
                 card = ifec%16;
                 crate = (ifec-card)/16;
-                num_events = rand()%(5*32)+1; // it goes around up to five full loops
+                num_events = 5*32+rand()%(5*32)+1; // it goes around up to five full loops
                 for (i=0;i<num_events;i++){
                     // each sequencer reads out the channels in order
                     chan_id = ifec*32+sequencer[ifec];
@@ -226,58 +226,63 @@ int main(int argc, char *argv[])
                 }
             }
         } // end done < 2
-            
+
 
         // now we do some readout from the fecs to the xl3 
+        uint16_t data_avail;
         uint16_t slot_mask[19];
         int new_current_slot[19];
         for (icrate=0;icrate<19;icrate++){ // loop over crates
             slot_mask[icrate] = 0x0;
-            int num_packets = rand()%5+1;
             ibndl=0;
-            while (ibndl<(MEGASIZE*num_packets) && (slot_mask[icrate] != 0xFFFF)){ // each crate sends one packet
-                for (j=current_slot[icrate];j<(current_slot[icrate]+16);j++){
-                    ifec = j%16;
-                    i = 0;
-                    while (i<MEGASIZE && ibndl<(MEGASIZE*num_packets)){ // read out up to 120 from each slot
-                        new_current_slot[icrate] = ifec;
-                        card = icrate*16+ifec;
-                        if (freadptr[card] != fwriteptr[card]){
-                            xl3[xl3ptr].word[0] = fecs[card][freadptr[card]].word[0];
-                            xl3[xl3ptr].word[1] = fecs[card][freadptr[card]].word[1];
-                            xl3[xl3ptr].word[2] = fecs[card][freadptr[card]].word[2];
-                            int gtid = pmtbundle_gtid(&xl3[xl3ptr]);
-                            int ccc = pmtbundle_pmtid(&xl3[xl3ptr]); 
-                            if (gtid > last_gtid3[ccc] || gtid == 0)
-                                last_gtid3[ccc] = gtid;
-                            else
-                                printf("wtf #3 for pmt %d, %d < %d\n",ccc,gtid,last_gtid3[ccc]); 
+            data_avail = 0x0;
+            // read out each xl3 fully
+            for (j=0;j<16;j++){
+                if (freadptr[icrate*16+j] != fwriteptr[icrate*16+j]){
+                    data_avail |= 0x1<<j; // fill data available
+                }
+            }
+            while (data_avail != 0x0){
+                for (j=0;j<16;j++){
+                    if ((0x1<<j) & data_avail){
+                        card = icrate*16+j;
+                        for (i=0;i<120;i++){
+                            if (freadptr[card] == fwriteptr[card]){
+                                data_avail &= ~(0x1<<j);
+                                break;
+                            }else{
+                                xl3[xl3ptr].word[0] = fecs[card][freadptr[card]].word[0];
+                                xl3[xl3ptr].word[1] = fecs[card][freadptr[card]].word[1];
+                                xl3[xl3ptr].word[2] = fecs[card][freadptr[card]].word[2];
 
-                            freadptr[card]++;
-                            if (freadptr[card] == PER_FEC)
-                                freadptr[card] = 0;
-                            xl3ptr++;
-                            i++;
-                            ibndl++;
-                        }else{
-                            slot_mask[icrate] |= (0x1<<ifec);
-                            break; // no more this slot
-                        }
-                    } // end readout loop one slot
+                                int gtid = pmtbundle_gtid(&xl3[xl3ptr]);
+                                int ccc = pmtbundle_pmtid(&xl3[xl3ptr]); 
+                                if (gtid > last_gtid3[ccc] || gtid == 0)
+                                    last_gtid3[ccc] = gtid;
+                                else
+                                    printf("wtf #3 for pmt %d, %d < %d\n",ccc,gtid,last_gtid3[ccc]); 
+                                freadptr[card]++;
+                                if (freadptr[card] == PER_FEC)
+                                    freadptr[card] = 0;
+                                xl3ptr++;
+                                ibndl++;
+                            }
+                        } // end loop of 120 bundles per fec
+                    } // end if data_avail mask
                 } // end loop over slots
-            } // end loop over number of packets being sent
-            current_slot[icrate] = new_current_slot[icrate];
+                // update data available again
+                data_avail = 0x0;
+                for (j=0;j<16;j++){
+                    if (freadptr[icrate*16+j] != fwriteptr[icrate*16+j]){
+                        data_avail |= 0x1<<j; // fill data available
+                    }
+                }
+            } // end while. stop when fecs are empty
         } // loop over crates
 
         if (done == 2){
-            for (i=0;i<19;i++){
-                if (slot_mask[i] == 0xFFFF){
-                    done = 3; // we are done with all the readout
-                }else{
-                    done = 2;
+                    done = 3;
                     break;
-                } 
-            }
         }
     } // keep doin more events until done
     printf("done\n");
@@ -322,24 +327,27 @@ int main(int argc, char *argv[])
     j = 0;
     FILE *outfile;
     outfile = fopen("client.txt","w");
+    printf("ipckt = %d\n",ipckt);
     while(1){
         for(i=0;i<ipckt;i++){
             uint32_t extra_gtid = (j*tot_num_events)%0xFFFFFF;
             xl3switch[i].cmdHeader.packet_num = extra_gtid&0xFFFF;
             xl3switch[i].cmdHeader.packet_type = (extra_gtid&0xFF0000)>>16;
-//            printf("packet %d: %d, %d, %d\n",i,xl3switch[i].header.type,xl3switch[i].cmdHeader.num_bundles,xl3switch[i].cmdHeader.packet_num);
+            if (extra_gtid != 0)
+                printf("extra = %u, %u\n",extra_gtid,xl3switch[i].cmdHeader.packet_num+(xl3switch[i].cmdHeader.packet_type<<16));
+            //            printf("packet %d: %d, %d, %d\n",i,xl3switch[i].header.type,xl3switch[i].cmdHeader.num_bundles,xl3switch[i].cmdHeader.packet_num);
             num_bundles = xl3switch[i].cmdHeader.num_bundles;
             PMTBundle *temp_bundle;
             temp_bundle = (PMTBundle *) xl3switch[i].payload;
             for (k=0;k<num_bundles;k++){
                 int ccc = pmtbundle_pmtid(temp_bundle);
-                int gtid = pmtbundle_gtid(temp_bundle);
+                int gtid = pmtbundle_gtid(temp_bundle) + extra_gtid;
                 fprintf(outfile,"%i %i\n",ccc,gtid);
                 if (gtid > last_gtid4[ccc] || gtid == 0)
                     last_gtid4[ccc] = gtid;
-                else
+                else if (gtid < last_gtid4[ccc])
                     printf("wtf #4 pmt %d was %d < %d\n",ccc,gtid,last_gtid4[ccc]);
-//                printf("%08x %08x %08x, %d\n",temp_bundle->word[0],temp_bundle->word[1],temp_bundle->word[2],pmtbundle_pmtid(temp_bundle));
+                //                printf("%08x %08x %08x, %d\n",temp_bundle->word[0],temp_bundle->word[1],temp_bundle->word[2],pmtbundle_pmtid(temp_bundle));
                 temp_bundle++;
             }
             n = send(sockfd, &xl3switch[i], MAX_BUFFER_LEN, 0);

@@ -64,7 +64,13 @@ void accept_xl3packet(void* packet_buffer)
     PMTBundle* pmtb = (PMTBundle*) (p->payload);
     for(ibundle=0; ibundle<nbundles; ibundle++) {
         uint32_t gtid = pmtbundle_gtid(pmtb) + p->cmdHeader.packet_num + (p->cmdHeader.packet_type<<6);
-        printf("gtid=%u packet_num=%u, packet_type=%u, %u, sum=%u\n", pmtbundle_gtid(pmtb), p->cmdHeader.packet_num, p->cmdHeader.packet_type, (p->cmdHeader.packet_type<<6), pmtbundle_gtid(pmtb) + p->cmdHeader.packet_num + (p->cmdHeader.packet_type<<6));
+        int i;
+        if (p->cmdHeader.packet_num != 0){
+            for (i=0;i<16*32*19;i++){
+//                printf("%d %d\n",i,last_gtid[i]);
+            }
+        }
+        //printf("gtid=%u packet_num=%u, packet_type=%u, %u, sum=%u\n", pmtbundle_gtid(pmtb), p->cmdHeader.packet_num, p->cmdHeader.packet_type, (p->cmdHeader.packet_type<<6), pmtbundle_gtid(pmtb) + p->cmdHeader.packet_num + (p->cmdHeader.packet_type<<6));
         // FIXME: eliminiate function calls
         uint32_t chan = get_bits(pmtb->word[0], 16, 5);
         uint32_t card = get_bits(pmtb->word[0], 26, 4);
@@ -72,7 +78,26 @@ void accept_xl3packet(void* packet_buffer)
         uint32_t pmtid = 512*crate + 32*card + chan;
 
         fprintf(outfile, "%i %i\n", pmtid, gtid);
+        
+        // fake shit that looks more like the sequencer for demo purposes
+        int last_card = card >= read_pos[crate] ? card: card + NFECS;
+        //printf("read %d,%d (%d), last time was %d\n",crate,card,last_card,read_pos[crate]);
+        int icard;
+        for (icard = read_pos[crate]+1;icard<last_card;icard++){
+           uint32_t first_pmtid = 512*crate+32*icard;
+           //printf("first (%d,%d) = %d\n",crate,icard,first_pmtid);
+           int ipmtid;
+           for (ipmtid = first_pmtid; ipmtid<first_pmtid+32;ipmtid++){
+               if (crate_gtid_last[crate] > last_gtid[ipmtid]){
+               //printf("updating %d to %d (from %d)\n",ipmtid,crate_gtid_last[crate],last_gtid[ipmtid]);
+               last_gtid[ipmtid] = crate_gtid_last[crate];
+               }
+           }
+        }
+        crate_gtid_last[crate] = gtid;
+        read_pos[crate] = card;
 
+        /*
         // if we have skipped a card twice, the entire crate must be finished
         // up to the gtid that card was on last, and we can update the 
         // last_gtid array.
@@ -94,18 +119,19 @@ void accept_xl3packet(void* packet_buffer)
                 crate_skipped[crate] |= 1<<card;
                 read_pos[crate] = card;
         }
-
+        */ 
         // similarly, look at sequencer skips
         int last_chan = chan > seq_pos[crate][card] ? chan: chan + NCHANS;
-	if (crate==0 && card==0)
-           printf("seq at %d (id %d). Now at %d (id %d). Loop from %d to %d\n",seq_pos[crate][card],last_gtid[512*crate+32*card+seq_pos[crate][card]],chan,gtid,seq_pos[crate][card]+1,last_chan);
+	//if (crate==0 && card==0)
+      //     printf("seq at %d (id %d). Now at %d (id %d). Loop from %d to %d\n",seq_pos[crate][card],last_gtid[512*crate+32*card+seq_pos[crate][card]],chan,gtid,seq_pos[crate][card]+1,last_chan);
         int ichan;
         for(ichan=seq_pos[crate][card]+1; ichan<last_chan; ichan++) {
             int ch = ichan % 32;
             uint32_t ccid = 512*crate + 32*card;
-            last_gtid[ccid + ch] = last_gtid[ccid + seq_pos[crate][card]];
-            if (crate==0 && card==0)
-               printf("chan %d (%d) changed to %d\n",ch,ccid+ch,last_gtid[ccid+ch]);
+            if (last_gtid[ccid+seq_pos[crate][card]] > last_gtid[ccid + ch])
+                last_gtid[ccid + ch] = last_gtid[ccid + seq_pos[crate][card]];
+        //    if (crate==0 && card==0)
+          //     printf("chan %d (%d) changed to %d\n",ch,ccid+ch,last_gtid[ccid+ch]);
         }
         seq_pos[crate][card] = chan;
 
