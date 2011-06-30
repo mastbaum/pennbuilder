@@ -13,7 +13,7 @@
 //#define PER_FEC (32*PER_CHANNEL)
 #define PER_FEC (32*50)
 #define PER_CRATE (304*PER_FEC)
-#define INPUT_FILE "pbomb10k.txt"
+#define INPUT_FILE "data.txt"
 
 int sockfd;
 

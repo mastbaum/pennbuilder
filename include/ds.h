@@ -1,5 +1,6 @@
 #include <pthread.h>
 #include <stdint.h>
+#include <time.h>
 
 #define NPMTS 10000
 
@@ -36,6 +37,7 @@ typedef struct
     MTCData mtc;
     CAENData caen;
     uint32_t gtid;
+    struct timespec builder_arrival_time;
     uint32_t run_id;
     uint32_t subrun_id;
     uint32_t nhits;
@@ -88,7 +90,7 @@ typedef struct
     uint32_t cratemask;
     uint32_t first_event_id;
     uint32_t valid_event_id;
-    uint32_t run_id;    // Double-check on the run
+    uint32_t run_id;
 } RHDR;
 
 #define MAX_ROPES 10
@@ -160,7 +162,4 @@ void buffer_status(Buffer* b);
 void buffer_clear(Buffer* b);
 int buffer_at(Buffer* b, unsigned int id, RecordType* type, void** pk);
 int buffer_insert(Buffer* b, unsigned int id, RecordType type, void* pk);
-
-//listener
-
 

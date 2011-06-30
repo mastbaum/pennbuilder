@@ -6,6 +6,7 @@
 #include <netinet/in.h>
 #include <pthread.h>
 #include <signal.h>
+#include <time.h>
 #include <jemalloc/jemalloc.h>
 #include "listener.h"
 #include "ds.h"
@@ -52,6 +53,39 @@ void die(const char *msg)
     exit(1);
 }
 
+void accept_xl3packet(void* packet_buffer)
+{
+    XL3Packet* p = realloc(packet_buffer, sizeof(XL3Packet));
+    // fixme: check packet type to ensure megabundle
+    int nbundles = p->cmdHeader.num_bundles;
+    int ibundle;
+    PMTBundle* pmtb = (PMTBundle*) (p->payload);
+    for(ibundle=0; ibundle<nbundles; ibundle++) {
+        uint32_t gtid = pmtbundle_gtid(pmtb); // + p->cmdHeader.packet_num;
+        uint32_t pmtid = pmtbundle_pmtid(pmtb);
+        if(gtid < last_gtid[pmtid])
+            printf(""); //printf("GTID %i<=%i for PMT %i received out of order\n", gtid, last_gtid[pmtid], pmtid);
+        else
+            last_gtid[pmtid] = (uint32_t)gtid;
+        Event* e;
+        RecordType r;
+        buffer_at(event_buffer, gtid, &r, (void*)&e);
+        if(e == NULL) {
+            e = malloc(sizeof(Event));
+            e->gtid = gtid;
+            struct timespec t;
+            clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &t);
+            e->builder_arrival_time = t;
+            buffer_insert(event_buffer, gtid, DETECTOR_EVENT, (void*)e);
+        }
+        e->pmt[pmtid] = *pmtb;
+        pthread_mutex_lock(&(event_buffer->mutex));
+        e->nhits++;
+        pthread_mutex_unlock(&(event_buffer->mutex));
+        pmtb++;
+    }
+}
+
 void* listener_child(void* psock)
 {
     int sock = *((int*) psock);
@@ -71,44 +105,23 @@ void* listener_child(void* psock)
         }
         else {
             PacketType packet_type = ((PacketHeader*) packet_buffer)->type;
-            printf("Recieved packet of type %i on socket %i\n", packet_type, sock);
-            if(packet_type == PMTBUNDLE) {
-                XL3Packet* p = realloc(packet_buffer, sizeof(XL3Packet));
-                // fixme: check packet type to ensure megabundle
-                int nbundles = p->cmdHeader.num_bundles;
-                int ibundle;
-                PMTBundle* pmtb = (PMTBundle*) (p->payload);
-                for(ibundle=0; ibundle<nbundles; ibundle++) {
-                    uint32_t gtid = pmtbundle_gtid(pmtb) + p->cmdHeader.packet_num + p->cmdHeader.packet_type<<16;
-                    uint32_t pmtid = pmtbundle_pmtid(pmtb);
-                    if(gtid > last_gtid[pmtid] || gtid == 0)
-                        last_gtid[pmtid] = gtid;
-                    else
-                        printf("GTID %u (%u) for PMT %i received out of order.\n", gtid, last_gtid[pmtid], pmtid);
-                    Event* e;
-                    RecordType r;
-                    buffer_at(event_buffer, gtid, &r, (void*)&e);
-                    if(e == NULL) {
-                        e = malloc(sizeof(Event));
-                        e->gtid = gtid;
-                        buffer_insert(event_buffer, gtid, DETECTOR_EVENT, (int*)e);
-                    }
-                    pthread_mutex_lock(&(event_buffer->mutex));
-                    e->pmt[pmtid] = *pmtb;
-                    e->nhits++;
-                    pthread_mutex_unlock(&(event_buffer->mutex));
-                    //buffer_status(event_buffer);
-                    pmtb++;
-                }
-            //case MTCINFO: break;
-            //case CAENINFO: break;
-            //case TRIG: break;
-            //case EPED: break;
-            //case RHDR: break;
-            //case CAST: break;
-            //case CAAC: break;
-            //default:
-            }
+//            printf("Recieved packet of type %i on socket %i\n", packet_type, sock);
+            if(packet_type == XL3_PACKET)
+                accept_xl3packet(packet_buffer);
+            else if(packet_type == MTC_PACKET)
+                continue;
+            else if(packet_type == CAEN_PACKET)
+                continue;
+            else if(packet_type == TRIG_PACKET)
+                continue;
+            else if(packet_type == EPED_PACKET)
+                continue;
+            else if(packet_type == RHDR_PACKET)
+                continue;
+            else if(packet_type == CAST_PACKET)
+                continue;
+            else if(packet_type == CAAC_PACKET)
+                continue;
             else {
                 printf("Unknown packet type %i on socket %i\n", packet_type, sock);
                 // do something
@@ -120,43 +133,43 @@ void* listener_child(void* psock)
 
 void* listener(void* ptr)
 {
-     int portno;
-     socklen_t clilen;
-     struct sockaddr_in serv_addr, cli_addr;
+    int portno;
+    socklen_t clilen;
+    struct sockaddr_in serv_addr, cli_addr;
 
-     portno = *((int*)ptr);
+    portno = *((int*)ptr);
 
-     sockfd = socket(AF_INET, SOCK_STREAM, 0);
-     if(sockfd < 0) die("ERROR opening socket");
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if(sockfd < 0) die("ERROR opening socket");
 
-     memset(&serv_addr, 0, sizeof(serv_addr));
-     serv_addr.sin_family = AF_INET;
-     serv_addr.sin_addr.s_addr = INADDR_ANY;
-     serv_addr.sin_port = htons(portno);
+    memset(&serv_addr, 0, sizeof(serv_addr));
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_addr.s_addr = INADDR_ANY;
+    serv_addr.sin_port = htons(portno);
 
-     if(bind(sockfd, (struct sockaddr*) &serv_addr, sizeof(serv_addr)) < 0)
-         die("ERROR on binding");
+    if(bind(sockfd, (struct sockaddr*) &serv_addr, sizeof(serv_addr)) < 0)
+        die("ERROR on binding");
 
-     listen(sockfd, 5);
+    listen(sockfd, 5);
 
-     clilen = sizeof(cli_addr);
-     signal(SIGINT, &handler);
-     pthread_t threads[NUM_THREADS];
-     int thread_index = 0; //FIXME: want NUM_THREADS currently, not cumulative
-     while(1) {
-         int newsockfd = accept(sockfd, (struct sockaddr*) &cli_addr, &clilen);
-         if(newsockfd < 0) die("ERROR on accept");
-         else {
-             thread_sockfd[thread_index] = newsockfd;
-             printf("spawning thread with index %i\n", thread_index);
-             pthread_create(&(threads[thread_index]),
-                            NULL,
-                            listener_child,
-                            (void*)&(thread_sockfd[thread_index]));
-             thread_index++;
-         }
-     }
+    clilen = sizeof(cli_addr);
+    signal(SIGINT, &handler);
+    pthread_t threads[NUM_THREADS];
+    int thread_index = 0; //FIXME: want NUM_THREADS currently, not cumulative
+    while(1) {
+        int newsockfd = accept(sockfd, (struct sockaddr*) &cli_addr, &clilen);
+        if(newsockfd < 0) die("ERROR on accept");
+        else {
+            thread_sockfd[thread_index] = newsockfd;
+            printf("spawning thread with index %i\n", thread_index);
+            pthread_create(&(threads[thread_index]),
+                    NULL,
+                    listener_child,
+                    (void*)&(thread_sockfd[thread_index]));
+            thread_index++;
+        }
+    }
 
-     close_sockets();
+    close_sockets();
 }
 

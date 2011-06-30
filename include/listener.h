@@ -11,7 +11,9 @@ void die(const char *msg);
 void* listener_child(void* psock);
 void* listener(void* ptr);
 
-typedef enum { PMTBUNDLE } PacketType;
+void accept_xl3packet(void* packet_buffer);
+
+typedef enum { XL3_PACKET, MTC_PACKET, CAEN_PACKET, TRIG_PACKET, EPED_PACKET, RHDR_PACKET, CAST_PACKET, CAAC_PACKET } PacketType;
 
 typedef struct
 {

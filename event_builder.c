@@ -9,9 +9,9 @@
 #include "ds.h"
 
 /** Event Builder for SNO+, C edition
- *  
- *  Enqueues incoming raw data in a ring buffer, and writes out to RAT files
- *  as events are finished (per XL3 flag) or buffer is filling up.
+ *
+ *  Enqueues incoming raw data in a ring buffer, and writes out to disk and/or
+ *  a socket as events are finished.
  *
  *  Andy Mastbaum (mastbaum@hep.upenn.edu), June 2011
  */ 
@@ -31,19 +31,28 @@ int main(int argc, char *argv[])
     else
         port = atoi(argv[1]);
 
+    // initialization
     buffer_alloc(&event_buffer, 2000);
     buffer_alloc(&event_header_buffer, 50);
     buffer_alloc(&run_header_buffer, 20);
+    memset(&last_gtid, 0, NPMTS*sizeof(uint32_t));
 
+    RHDR* rh = malloc(sizeof(RHDR));
+    rh->run_id = 123456;
+    rh->first_event_id = 0;
+    buffer_push(run_header_buffer, RUN_HEADER, rh);
+
+    // launch listener (input) and shipper (output) threads
     pthread_t tlistener;
     pthread_create(&tlistener, NULL, listener, (void*)&port);
-
     pthread_t tshipper;
     pthread_create(&tshipper, NULL, shipper, NULL);
 
+    // wait for threads to join before exiting
     pthread_join(tlistener, NULL);
     pthread_join(tshipper, NULL);
 
+    // cleanup
     buffer_status(event_buffer);
     buffer_clear(event_buffer);
     free(event_buffer);
