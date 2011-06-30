@@ -6,10 +6,10 @@
 #include <jemalloc/jemalloc.h>
 #include "ds.h"
 
-int get_bits(int x, int position, int count)
+uint32_t get_bits(uint32_t x, uint32_t position, uint32_t count)
 {
-  int shifted = x >> position;
-  int mask = ((uint64_t)1 << count) - 1;
+  uint32_t shifted = x >> position;
+  uint32_t mask = ((uint64_t)1 << count) - 1;
   return shifted & mask;
 }
 
@@ -33,9 +33,9 @@ uint32_t pmtbundle_pmtid(PMTBundle* p)
 
 uint32_t pmtbundle_gtid(PMTBundle* p)
 {
-    int gtid1 = get_bits(p->word[0], 0, 16);
-    int gtid2 = get_bits(p->word[2], 12, 4);
-    int gtid3 = get_bits(p->word[2], 28, 4);
+    uint32_t gtid1 = get_bits(p->word[0], 0, 16);
+    uint32_t gtid2 = get_bits(p->word[2], 12, 4);
+    uint32_t gtid3 = get_bits(p->word[2], 28, 4);
     return (gtid1 + (gtid2<<16) + (gtid3<<20));
 }
 

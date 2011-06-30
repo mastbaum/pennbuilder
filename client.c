@@ -324,7 +324,7 @@ int main(int argc, char *argv[])
     outfile = fopen("client.txt","w");
     while(1){
         for(i=0;i<ipckt;i++){
-            int extra_gtid = (j*tot_num_events)%0xFFFFFF;
+            uint32_t extra_gtid = (j*tot_num_events)%0xFFFFFF;
             xl3switch[i].cmdHeader.packet_num = extra_gtid&0xFFFF;
             xl3switch[i].cmdHeader.packet_type = (extra_gtid&0xFF0000)>>16;
 //            printf("packet %d: %d, %d, %d\n",i,xl3switch[i].header.type,xl3switch[i].cmdHeader.num_bundles,xl3switch[i].cmdHeader.packet_num);

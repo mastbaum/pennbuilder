@@ -53,6 +53,8 @@ void die(const char *msg)
     exit(1);
 }
 
+FILE* outfile;
+
 void accept_xl3packet(void* packet_buffer)
 {
     XL3Packet* p = realloc(packet_buffer, sizeof(XL3Packet));
@@ -61,12 +63,15 @@ void accept_xl3packet(void* packet_buffer)
     int ibundle;
     PMTBundle* pmtb = (PMTBundle*) (p->payload);
     for(ibundle=0; ibundle<nbundles; ibundle++) {
-        uint32_t gtid = pmtbundle_gtid(pmtb); // + p->cmdHeader.packet_num;
+        uint32_t gtid = pmtbundle_gtid(pmtb) + p->cmdHeader.packet_num + (p->cmdHeader.packet_type<<6);
+        printf("gtid=%u packet_num=%u, packet_type=%u, %u, sum=%u\n", pmtbundle_gtid(pmtb), p->cmdHeader.packet_num, p->cmdHeader.packet_type, (p->cmdHeader.packet_type<<6), pmtbundle_gtid(pmtb) + p->cmdHeader.packet_num + (p->cmdHeader.packet_type<<6));
         // FIXME: eliminiate function calls
         uint32_t chan = get_bits(pmtb->word[0], 16, 5);
         uint32_t card = get_bits(pmtb->word[0], 26, 4);
         uint32_t crate = get_bits(pmtb->word[0], 21, 5);
         uint32_t pmtid = 512*crate + 32*card + chan;
+
+        fprintf(outfile, "%i %i\n", pmtid, gtid);
 
         // if we have skipped a card twice, the entire crate must be finished
         // up to the gtid that card was on last, and we can update the 
@@ -202,6 +207,8 @@ void* listener(void* ptr)
 
     listen(sockfd, 5);
 
+    outfile = fopen("server.txt", "w");
+
     clilen = sizeof(cli_addr);
     signal(SIGINT, &handler);
     pthread_t threads[NUM_THREADS];
@@ -219,6 +226,8 @@ void* listener(void* ptr)
             thread_index++;
         }
     }
+
+    fclose(outfile);
 
     close_sockets();
 }
