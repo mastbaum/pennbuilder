@@ -16,6 +16,10 @@
 #define INPUT_FILE "data.txt"
 
 int sockfd;
+int last_gtid1[10000];
+int last_gtid2[10000];
+int last_gtid3[10000];
+int last_gtid4[10000];
 
 void error(const char *msg)
 {
@@ -63,6 +67,10 @@ int main(int argc, char *argv[])
     signal(SIGINT, &handler);
 
     // lets start the magic
+    memset((char *) last_gtid1, 0, 10000*sizeof(int));
+    memset((char *) last_gtid2, 0, 10000*sizeof(int));
+    memset((char *) last_gtid3, 0, 10000*sizeof(int));
+    memset((char *) last_gtid4, 0, 10000*sizeof(int));
     FILE *infile;
     srand(time(NULL));
     PMTBundle *channels[19*16*32];
@@ -143,8 +151,15 @@ int main(int argc, char *argv[])
                         crate = (temp_bundle.word[0] & 0x03E00000) >> 21;
                         card = (temp_bundle.word[0] & 0x3C000000) >> 26;
                         channel = (temp_bundle.word[0] & 0x001F0000) >> 16;
+                        int gtid = pmtbundle_gtid(&temp_bundle);
 
                         chan_id = crate*16*32+card*32+channel;
+                        if (gtid > last_gtid1[chan_id] || gtid == 0){
+                            last_gtid1[chan_id] = gtid;
+                        }else{
+                            printf("wtf for pmt %d, %d < %d\n",chan_id,gtid,last_gtid1[chan_id]); 
+                        }
+
                         if (chan_id == 9190)
                             continue;
                         channels[chan_id][cwriteptr[chan_id]].word[0] = temp_bundle.word[0];
@@ -182,6 +197,12 @@ int main(int argc, char *argv[])
                         fecs[ifec][fwriteptr[ifec]].word[1] = channels[chan_id][creadptr[chan_id]].word[1];
                         fecs[ifec][fwriteptr[ifec]].word[2] = channels[chan_id][creadptr[chan_id]].word[2];
                         fwriteptr[ifec]++;
+                        int gtid = pmtbundle_gtid(&fecs[ifec][fwriteptr[ifec]]);
+                        if (gtid > last_gtid2[chan_id] || gtid == 0)
+                            last_gtid2[chan_id] = gtid;
+                        else
+                            printf("wtf #2 for pmt %d, %d < %d\n",chan_id,gtid,last_gtid2[chan_id]); 
+
                         if (fwriteptr[ifec] == PER_FEC)
                             fwriteptr[ifec] = 0;
                         else if (fwriteptr[ifec] == freadptr[ifec])
@@ -225,6 +246,13 @@ int main(int argc, char *argv[])
                             xl3[xl3ptr].word[0] = fecs[card][freadptr[card]].word[0];
                             xl3[xl3ptr].word[1] = fecs[card][freadptr[card]].word[1];
                             xl3[xl3ptr].word[2] = fecs[card][freadptr[card]].word[2];
+                            int gtid = pmtbundle_gtid(&xl3[xl3ptr]);
+                            int ccc = pmtbundle_pmtid(&xl3[xl3ptr]); 
+                            if (gtid > last_gtid3[ccc] || gtid == 0)
+                                last_gtid3[ccc] = gtid;
+                            else
+                                printf("wtf #3 for pmt %d, %d < %d\n",ccc,gtid,last_gtid3[ccc]); 
+
                             freadptr[card]++;
                             if (freadptr[card] == PER_FEC)
                                 freadptr[card] = 0;
@@ -252,6 +280,7 @@ int main(int argc, char *argv[])
             }
         }
     } // keep doin more events until done
+    printf("done\n");
 
     // ok we are done with the fec buffers
     for (i=0;i<304;i++){
@@ -291,6 +320,8 @@ int main(int argc, char *argv[])
 
     //now we send packets forever
     j = 0;
+    FILE *outfile;
+    outfile = fopen("client.txt","w");
     while(1){
         for(i=0;i<ipckt;i++){
             int extra_gtid = (j*tot_num_events)%0xFFFFFF;
@@ -301,6 +332,13 @@ int main(int argc, char *argv[])
             PMTBundle *temp_bundle;
             temp_bundle = (PMTBundle *) xl3switch[i].payload;
             for (k=0;k<num_bundles;k++){
+                int ccc = pmtbundle_pmtid(temp_bundle);
+                int gtid = pmtbundle_gtid(temp_bundle);
+                fprintf(outfile,"%i %i\n",ccc,gtid);
+                if (gtid > last_gtid4[ccc] || gtid == 0)
+                    last_gtid4[ccc] = gtid;
+                else
+                    printf("wtf #4 pmt %d was %d < %d\n",ccc,gtid,last_gtid4[ccc]);
 //                printf("%08x %08x %08x, %d\n",temp_bundle->word[0],temp_bundle->word[1],temp_bundle->word[2],pmtbundle_pmtid(temp_bundle));
                 temp_bundle++;
             }
@@ -309,6 +347,7 @@ int main(int argc, char *argv[])
         j++;
     }
     free(xl3switch);
+    fclose(outfile);
 
 
     close(sockfd);
