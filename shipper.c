@@ -54,6 +54,8 @@ void* shipper(void* ptr)
                 min_pmt = ipmt;
             }
 
+        printf("min_gtid = %i, min_pmt = %i\n",min_gtid,min_pmt);
+
         Event* etemp = (Event*) event_buffer->keys[event_buffer->start];
         if(etemp) {
             clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &time_now);
