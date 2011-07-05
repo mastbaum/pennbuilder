@@ -158,6 +158,7 @@ int main(int argc, char *argv[])
                             last_gtid1[chan_id] = gtid;
                         }else{
                             printf("wtf for pmt %d, %d < %d\n",chan_id,gtid,last_gtid1[chan_id]); 
+                            continue;
                         }
 
                         if (chan_id == 9190)
