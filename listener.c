@@ -15,6 +15,7 @@ extern Buffer* event_buffer;
 extern Buffer* event_header_buffer;
 extern Buffer* run_header_buffer;
 extern uint32_t last_gtid[NPMTS];
+extern FILE* outfile;
 
 void close_sockets()
 {
@@ -41,6 +42,8 @@ void handler(int signal)
             printf("Warning: exiting with non-empty run header buffer\n");
             buffer_status(run_header_buffer);
         }
+        printf("closing run file\n");
+        fclose(outfile);
         exit(0);
     }
     else
@@ -61,7 +64,7 @@ void accept_xl3packet(void* packet_buffer)
     int ibundle;
     PMTBundle* pmtb = (PMTBundle*) (p->payload);
     for(ibundle=0; ibundle<nbundles; ibundle++) {
-        uint32_t gtid = pmtbundle_gtid(pmtb) + p->cmdHeader.packet_num + (p->cmdHeader.packet_type<<6);
+        uint32_t gtid = pmtbundle_gtid(pmtb) + p->cmdHeader.packet_num + (p->cmdHeader.packet_type<<16);
         uint32_t chan = get_bits(pmtb->word[0], 16, 5);
         uint32_t card = get_bits(pmtb->word[0], 26, 4);
         uint32_t crate = get_bits(pmtb->word[0], 21, 5);

@@ -96,7 +96,7 @@ int buffer_pop(Buffer* b, RecordType* type, void** pk)
         b->start %= b->size;
     }
     pthread_mutex_unlock(&(b->mutex));
-    printf("%lu %lu\n", b->start, b->end);
+    //printf("%lu %lu\n", b->start, b->end);
     return !empty;
 }
 

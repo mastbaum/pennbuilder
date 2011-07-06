@@ -43,15 +43,15 @@ typedef struct
     uint32_t nhits;
     uint32_t evorder;
     uint64_t runmask;
-    char pack_ver;
-    char mcflag;
-    char datatype;
-    char clockstat;
+    uint8_t pack_ver;
+    uint8_t mcflag;
+    uint8_t datatype;
+    uint8_t clockstat;
 } Event;
 
 typedef struct
 {
-    short type;
+    uint16_t type;
     uint32_t gtdelay_coarse;
     uint32_t gtdelay_fine;
     uint32_t qped_amp;
@@ -64,7 +64,7 @@ typedef struct
 
 typedef struct
 {
-    short type;
+    uint16_t type;
     // Arrays correspond to:
     // N100Lo, N100Med, N100Hi, N20, N20LB, ESUMLo, ESUMHi, OWLn, OWLELo, OWLEHi
     uint32_t trigmask;
@@ -80,10 +80,10 @@ typedef struct
 
 typedef struct
 {
-    short type;
+    uint32_t type;
     uint32_t date;
     uint32_t time;
-    char daq_ver;
+    uint32_t daq_ver;
     uint32_t calib_trial_id;
     uint32_t srcmask;
     uint32_t runmask;
@@ -96,7 +96,7 @@ typedef struct
 #define MAX_ROPES 10
 typedef struct
 {
-    short type;
+    uint16_t type;
     uint16_t source_id;
     uint16_t source_stat;
     uint16_t nropes;
@@ -115,7 +115,7 @@ typedef struct
 
 typedef struct
 {
-    short type;
+    uint16_t type;
     float av_pos[3];
     float av_roll[3];  // roll, pitch and yaw
     float av_rope_length[7];

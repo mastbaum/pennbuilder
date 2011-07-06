@@ -351,6 +351,9 @@ int main(int argc, char *argv[])
                 //                printf("%08x %08x %08x, %d\n",temp_bundle->word[0],temp_bundle->word[1],temp_bundle->word[2],pmtbundle_pmtid(temp_bundle));
                 temp_bundle++;
             }
+            int iwhee;
+            for(iwhee=0;iwhee<100;iwhee++)
+              printf("wheeee\n");
             n = send(sockfd, &xl3switch[i], MAX_BUFFER_LEN, 0);
         }
         j++;

@@ -18,14 +18,10 @@ extern Buffer* event_header_buffer;
 extern Buffer* run_header_buffer;
 extern uint32_t last_gtid[NPMTS];
 
+void handler(int signal);
+
 #define MAX_RHDR_WAIT 100000*50
 FILE* outfile;
-
-void handler_shipper(int signal)
-{
-    if(signal == SIGINT)
-        fclose(outfile);
-};
 
 struct timespec tdiff(struct timespec start, struct timespec end)
 {
@@ -47,7 +43,7 @@ void* shipper(void* ptr)
     char filename[100];
     int run_active = 0;
 
-    signal(SIGINT, &handler_shipper);
+    signal(SIGINT, &handler);
     while(1) {
         uint32_t min_gtid = UINT_MAX;
         uint32_t min_pmt = 0;
@@ -58,7 +54,7 @@ void* shipper(void* ptr)
                 min_pmt = ipmt;
             }
 
-        printf("min_gtid = %i, min_pmt = %i\n",min_gtid,min_pmt);
+        //printf("min_gtid = %i, min_pmt = %i\n",min_gtid,min_pmt);
 
         Event* etemp = (Event*) event_buffer->keys[event_buffer->start];
         if(etemp) {
@@ -106,16 +102,28 @@ void* shipper(void* ptr)
                 if(first_gtid <= etemp->gtid) {
                     buffer_pop(run_header_buffer, &r, &header);
                     if(r == RUN_HEADER) {
+                        CDABHeader cdh;
+                        cdh.record_type = (int) r;
+                        cdh.size = sizeof(RHDR);
+                        fwrite(&cdh, sizeof(cdh), 1, outfile);
                         RHDR* rhdr = (RHDR*) header;
-                        fwrite(rhdr, sizeof(rhdr), 1, outfile);
+                        fwrite(rhdr, sizeof(RHDR), 1, outfile);
                     }
                     else if(r == AV_STATUS_HEADER) {
+                        CDABHeader cdh;
+                        cdh.record_type = (int) r;
+                        cdh.size = sizeof(CAAC);
+                        fwrite(&cdh, sizeof(cdh), 1, outfile);
                         CAAC* caac = (CAAC*) header;
-                        fwrite(caac, sizeof(caac), 1, outfile);
+                        fwrite(caac, sizeof(CAAC), 1, outfile);
                     }
                     else if(r == MANIPULATOR_STATUS_HEADER) {
+                        CDABHeader cdh;
+                        cdh.record_type = (int) r;
+                        cdh.size = sizeof(CAST);
+                        fwrite(&cdh, sizeof(cdh), 1, outfile);
                         CAST* cast = (CAST*) header;
-                        fwrite(cast, sizeof(cast), 1, outfile);
+                        fwrite(cast, sizeof(CAST), 1, outfile);
                     }
                     else {
                         printf("Encountered header of unknown type %i in run header buffer\n", r);
@@ -140,12 +148,20 @@ void* shipper(void* ptr)
                 if(first_gtid < etemp->gtid) {
                     buffer_pop(event_header_buffer, &r, &header);
                     if(r == TRIG_BANK_HEADER) {
+                        CDABHeader cdh;
+                        cdh.record_type = (int) r;
+                        cdh.size = sizeof(TRIG);
+                        fwrite(&cdh, sizeof(cdh), 1, outfile);
                         TRIG* trig = (TRIG*) header;
-                        fwrite(trig, sizeof(trig), 1, outfile);
+                        fwrite(trig, sizeof(TRIG), 1, outfile);
                     }
                     else if(r == EPED_BANK_HEADER) {
+                        CDABHeader cdh;
+                        cdh.record_type = (int) r;
+                        cdh.size = sizeof(EPED);
+                        fwrite(&cdh, sizeof(cdh), 1, outfile);
                         EPED* eped = (EPED*) header;
-                        fwrite(eped, sizeof(eped), 1, outfile);
+                        fwrite(eped, sizeof(EPED), 1, outfile);
                     }
                     else {
                         printf("Encountered header of unknown type %i in event header buffer\n", r);
@@ -161,9 +177,13 @@ void* shipper(void* ptr)
             Event* e;
             RecordType r;
             buffer_pop(event_buffer, &r, (void*)&e);
-            if(!e) { printf("omg\n"); continue; }
+            if(!e) { printf("popped null pointer\n"); continue; }
             //printf("popping e: %p, gtid %i\n", e, e->gtid);
-            fwrite(e, sizeof(e), 1, outfile);
+            CDABHeader cdh;
+            cdh.record_type = DETECTOR_EVENT;
+            cdh.size = sizeof(Event);
+            fwrite(&cdh, sizeof(CDABHeader), 1, outfile);
+            fwrite(e, sizeof(Event), 1, outfile);
             free(e);
 
             clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &time_now);
