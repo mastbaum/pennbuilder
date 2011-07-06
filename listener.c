@@ -53,8 +53,6 @@ void die(const char *msg)
     exit(1);
 }
 
-FILE* outfile;
-
 void accept_xl3packet(void* packet_buffer)
 {
     XL3Packet* p = realloc(packet_buffer, sizeof(XL3Packet));
@@ -64,35 +62,21 @@ void accept_xl3packet(void* packet_buffer)
     PMTBundle* pmtb = (PMTBundle*) (p->payload);
     for(ibundle=0; ibundle<nbundles; ibundle++) {
         uint32_t gtid = pmtbundle_gtid(pmtb) + p->cmdHeader.packet_num + (p->cmdHeader.packet_type<<6);
-        int i;
-        if (p->cmdHeader.packet_num != 0){
-            for (i=0;i<16*32*19;i++){
-//                printf("%d %d\n",i,last_gtid[i]);
-            }
-        }
-        //printf("gtid=%u packet_num=%u, packet_type=%u, %u, sum=%u\n", pmtbundle_gtid(pmtb), p->cmdHeader.packet_num, p->cmdHeader.packet_type, (p->cmdHeader.packet_type<<6), pmtbundle_gtid(pmtb) + p->cmdHeader.packet_num + (p->cmdHeader.packet_type<<6));
-        // FIXME: eliminiate function calls
         uint32_t chan = get_bits(pmtb->word[0], 16, 5);
         uint32_t card = get_bits(pmtb->word[0], 26, 4);
         uint32_t crate = get_bits(pmtb->word[0], 21, 5);
         uint32_t pmtid = 512*crate + 32*card + chan;
 
-        fprintf(outfile, "%i %i\n", pmtid, gtid);
-        
-        // fake shit that looks more like the sequencer for demo purposes
+        // fake to look more like the sequencer for demo purposes
         int last_card = card >= read_pos[crate] ? card: card + NFECS;
         //printf("read %d,%d (%d), last time was %d\n",crate,card,last_card,read_pos[crate]);
         int icard;
         for (icard = read_pos[crate]+1;icard<last_card;icard++){
            uint32_t first_pmtid = 512*crate+32*icard;
-           //printf("first (%d,%d) = %d\n",crate,icard,first_pmtid);
            int ipmtid;
-           for (ipmtid = first_pmtid; ipmtid<first_pmtid+32;ipmtid++){
-               if (crate_gtid_last[crate] > last_gtid[ipmtid]){
-               //printf("updating %d to %d (from %d)\n",ipmtid,crate_gtid_last[crate],last_gtid[ipmtid]);
-               last_gtid[ipmtid] = crate_gtid_last[crate];
-               }
-           }
+           for (ipmtid = first_pmtid; ipmtid<first_pmtid+32;ipmtid++)
+               if (crate_gtid_last[crate] > last_gtid[ipmtid])
+                   last_gtid[ipmtid] = crate_gtid_last[crate];
         }
         crate_gtid_last[crate] = gtid;
         read_pos[crate] = card;
@@ -122,30 +106,25 @@ void accept_xl3packet(void* packet_buffer)
         */ 
         // similarly, look at sequencer skips
         int last_chan = chan > seq_pos[crate][card] ? chan: chan + NCHANS;
-	//if (crate==0 && card==0)
-      //     printf("seq at %d (id %d). Now at %d (id %d). Loop from %d to %d\n",seq_pos[crate][card],last_gtid[512*crate+32*card+seq_pos[crate][card]],chan,gtid,seq_pos[crate][card]+1,last_chan);
         int ichan;
         for(ichan=seq_pos[crate][card]+1; ichan<last_chan; ichan++) {
             int ch = ichan % 32;
             uint32_t ccid = 512*crate + 32*card;
             if (last_gtid[ccid+seq_pos[crate][card]] > last_gtid[ccid + ch])
                 last_gtid[ccid + ch] = last_gtid[ccid + seq_pos[crate][card]];
-        //    if (crate==0 && card==0)
-          //     printf("chan %d (%d) changed to %d\n",ch,ccid+ch,last_gtid[ccid+ch]);
         }
         seq_pos[crate][card] = chan;
 
-
         if(gtid > last_gtid[pmtid])
             last_gtid[pmtid] = (uint32_t)gtid;
-        if (gtid < last_gtid[pmtid]){
-            printf("warning! %d was %d (< %d)\n",pmtid,gtid,last_gtid[pmtid]);
-            exit(1);
+        if(gtid < last_gtid[pmtid]){
+            printf("warning! got gtid %d on pmt %d, is < last_gtid %d\n", gtid, pmtid, last_gtid[pmtid]);
+            //exit(1);
         }
         Event* e;
         RecordType r;
         buffer_at(event_buffer, gtid, &r, (void*)&e);
-        if(e == NULL) {
+        if(!e) {
             e = malloc(sizeof(Event));
             e->gtid = gtid;
             struct timespec t;
@@ -153,6 +132,12 @@ void accept_xl3packet(void* packet_buffer)
             e->builder_arrival_time = t;
             buffer_insert(event_buffer, gtid, DETECTOR_EVENT, (void*)e);
         }
+
+        if(e && e->gtid!=gtid) {
+            printf("Cannot trample buffer! Ignoring GTID %i\n", gtid);
+            continue;
+        }
+
         e->pmt[pmtid] = *pmtb;
         pthread_mutex_lock(&(event_buffer->mutex));
         e->nhits++;
@@ -180,7 +165,6 @@ void* listener_child(void* psock)
         }
         else {
             PacketType packet_type = ((PacketHeader*) packet_buffer)->type;
-//            printf("Recieved packet of type %i on socket %i\n", packet_type, sock);
             if(packet_type == XL3_PACKET)
                 accept_xl3packet(packet_buffer);
             else if(packet_type == MTC_PACKET)
@@ -233,8 +217,6 @@ void* listener(void* ptr)
 
     listen(sockfd, 5);
 
-    outfile = fopen("server.txt", "w");
-
     clilen = sizeof(cli_addr);
     signal(SIGINT, &handler);
     pthread_t threads[NUM_THREADS];
@@ -252,8 +234,6 @@ void* listener(void* ptr)
             thread_index++;
         }
     }
-
-    fclose(outfile);
 
     close_sockets();
 }

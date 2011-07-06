@@ -18,10 +18,14 @@ extern Buffer* event_header_buffer;
 extern Buffer* run_header_buffer;
 extern uint32_t last_gtid[NPMTS];
 
-
 #define MAX_RHDR_WAIT 100000*50
+FILE* outfile;
 
-void handler(int signal);
+void handler_shipper(int signal)
+{
+    if(signal == SIGINT)
+        fclose(outfile);
+};
 
 struct timespec tdiff(struct timespec start, struct timespec end)
 {
@@ -39,11 +43,11 @@ struct timespec tdiff(struct timespec start, struct timespec end)
 void* shipper(void* ptr)
 {
     struct timespec time_now;
-    FILE* outfile = NULL;
+    outfile = NULL;
     char filename[100];
     int run_active = 0;
 
-    signal(SIGINT, &handler);
+    signal(SIGINT, &handler_shipper);
     while(1) {
         uint32_t min_gtid = UINT_MAX;
         uint32_t min_pmt = 0;
@@ -60,8 +64,7 @@ void* shipper(void* ptr)
         if(etemp) {
             clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &time_now);
             struct timespec event_arrival_time = etemp->builder_arrival_time;
-//            printf("tdiff=%li\n", tdiff(time_now, event_arrival_time).tv_nsec/1.e9);
-            if(!(etemp->gtid > min_gtid)) // || tdiff(time_now, event_arrival_time).tv_sec > 1))
+            if(etemp->gtid > min_gtid) // || tdiff(time_now, event_arrival_time).tv_sec > 1))
                 continue;
 
             // loop through run headers looking for an RHDR
@@ -158,10 +161,10 @@ void* shipper(void* ptr)
             Event* e;
             RecordType r;
             buffer_pop(event_buffer, &r, (void*)&e);
-            if(!e) { printf("omg\n"); exit(1); }
-            printf("popping e: %p, gtid %i\n", e, e->gtid);
+            if(!e) { printf("omg\n"); continue; }
+            //printf("popping e: %p, gtid %i\n", e, e->gtid);
             fwrite(e, sizeof(e), 1, outfile);
-            //free(e);
+            free(e);
 
             clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &time_now);
         }

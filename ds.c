@@ -6,7 +6,7 @@
 #include <jemalloc/jemalloc.h>
 #include "ds.h"
 
-uint32_t get_bits(uint32_t x, uint32_t position, uint32_t count)
+inline uint32_t get_bits(uint32_t x, uint32_t position, uint32_t count)
 {
   uint32_t shifted = x >> position;
   uint32_t mask = ((uint64_t)1 << count) - 1;
@@ -23,7 +23,7 @@ void pmtbundle_print(PMTBundle* p)
         printf("  word%i =  %u:\n", i, p->word[i]);
 }
 
-uint32_t pmtbundle_pmtid(PMTBundle* p)
+inline uint32_t pmtbundle_pmtid(PMTBundle* p)
 {
     int ichan = get_bits(p->word[0], 16, 5);
     int icard = get_bits(p->word[0], 26, 4);
@@ -31,7 +31,7 @@ uint32_t pmtbundle_pmtid(PMTBundle* p)
     return (512*icrate + 32*icard + ichan);
 }
 
-uint32_t pmtbundle_gtid(PMTBundle* p)
+inline uint32_t pmtbundle_gtid(PMTBundle* p)
 {
     uint32_t gtid1 = get_bits(p->word[0], 0, 16);
     uint32_t gtid2 = get_bits(p->word[2], 12, 4);
@@ -96,6 +96,7 @@ int buffer_pop(Buffer* b, RecordType* type, void** pk)
         b->start %= b->size;
     }
     pthread_mutex_unlock(&(b->mutex));
+    printf("%lu %lu\n", b->start, b->end);
     return !empty;
 }
 
@@ -139,17 +140,17 @@ int buffer_insert(Buffer* b, unsigned int id, RecordType type, void* pk)
 {
     pthread_mutex_lock(&(b->mutex));
     int keyid = (id - b->offset) % b->size;
-    if(keyid < b->size) {
+    if(!b->keys[keyid]) {
         b->type[keyid] = type;
         b->keys[keyid] = pk;
-        if(keyid > b->end) {
-            b->end = keyid;
-            b->end %= b->size;
-        }
-        if(keyid < b->start) {
-            printf("buffer_insert: got record with id %i < read position %lu\n", keyid, b->start);
-            // received data for already-shipped event, do something
-        }
+        b->end = keyid;
+        b->end %= b->size;
+        // since it's a ring buffer, we don't really know if we received data
+        // for an already-shipped event, since write<read when we near the end
+        // need another list if we want to check...
+        //if(keyid < b->start) {
+            //printf("buffer_insert: got record with id %i < read position %lu\n", keyid, b->start);
+        //}
         pthread_mutex_unlock(&(b->mutex));
         return 0;
     }

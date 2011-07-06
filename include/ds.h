@@ -2,7 +2,7 @@
 #include <stdint.h>
 #include <time.h>
 
-#define NPMTS 10000
+#define NPMTS 19 * 16 * 32
 
 /** Event Builder structs */
 
@@ -121,7 +121,7 @@ typedef struct
     float av_rope_length[7];
 } CAAC;
 
-#define BUFFER_SIZE 2000
+#define BUFFER_SIZE 10000
 #define NUM_OF_ELEMS (BUFFER_SIZE-1)
 
 /** Ring FIFO buffer

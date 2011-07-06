@@ -34,7 +34,7 @@ int main(int argc, char *argv[])
         port = atoi(argv[1]);
 
     // initialization
-    buffer_alloc(&event_buffer, 2000);
+    buffer_alloc(&event_buffer, 10000);
     buffer_alloc(&event_header_buffer, 50);
     buffer_alloc(&run_header_buffer, 20);
     memset(&last_gtid, 0, NPMTS*sizeof(uint32_t));
