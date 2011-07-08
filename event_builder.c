@@ -10,13 +10,11 @@
 
 /** Event Builder for SNO+, C edition
  *
- *  Enqueues incoming raw data in a ring buffer, and writes out to disk and/or
+ *  Enqueues incoming raw data in ring buffers, and writes out to disk and/or
  *  a socket as events are finished.
  *
  *  Andy Mastbaum (mastbaum@hep.upenn.edu), June 2011
  */ 
-
-#define NCRATES 19
 
 Buffer* event_buffer;
 Buffer* event_header_buffer;
@@ -39,6 +37,7 @@ int main(int argc, char *argv[])
     buffer_alloc(&run_header_buffer, 20);
     memset(&last_gtid, 0, NPMTS*sizeof(uint32_t));
 
+    // fake RHDR for testing
     RHDR* rh = malloc(sizeof(RHDR));
     rh->run_id = 123456;
     rh->first_event_id = 0;

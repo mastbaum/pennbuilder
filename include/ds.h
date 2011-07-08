@@ -2,9 +2,13 @@
 #include <stdint.h>
 #include <time.h>
 
-#define NPMTS 19 * 16 * 32
+/** Data structure structs 
+ *
+ *  Largely copied from RAT::DS:PackedEvent
+ */
 
-/** Event Builder structs */
+#define NPMTS 19 * 16 * 32
+#define MAX_ROPES 10
 
 /// PMTBundle contains raw PMT data packed into 3 32-bit words (96 bits)
 typedef struct
@@ -12,9 +16,12 @@ typedef struct
     uint32_t word[3];
 } PMTBundle;
 
+// print some pmt bundle info (address, gtid, pmtid) for debugging
 void pmtbundle_print(PMTBundle* p);
-uint32_t pmtbundle_pmtid(PMTBundle* p);
-uint32_t pmtbundle_gtid(PMTBundle* p);
+
+// extract ids from packed pmt bundle
+inline uint32_t pmtbundle_pmtid(PMTBundle* p);
+inline uint32_t pmtbundle_gtid(PMTBundle* p);
 
 /// MTCData contains trigger information. Format unknown AToW. (192 bits)
 typedef struct
@@ -29,8 +36,7 @@ typedef struct
     uint32_t data[8][55]; // v1720 packs data like so (2.5 samples/word)
 } CAENData;
 
-/// Event contains all data for SNO+ event. (973k bits = 120 KB)
-/// At 120 KB/event, a PC with 24GB of RAM can store 200000 events in memory
+/// Event: contains all data for a single SNO+ detector event
 typedef struct
 {
     PMTBundle pmt[NPMTS];
@@ -49,6 +55,7 @@ typedef struct
     uint8_t clockstat;
 } Event;
 
+/// EPED: event-level header with pedestal data
 typedef struct
 {
     uint16_t type;
@@ -62,6 +69,7 @@ typedef struct
     uint32_t run_id;    // Double-check on the run
 } EPED;
 
+/// TRIG: event-level header with MTC trigger metadata
 typedef struct
 {
     uint16_t type;
@@ -78,6 +86,7 @@ typedef struct
     uint32_t wun_id;    // Double-check on the run
 } TRIG;
 
+/// RHDR: run header
 typedef struct
 {
     uint32_t type;
@@ -93,7 +102,7 @@ typedef struct
     uint32_t run_id;
 } RHDR;
 
-#define MAX_ROPES 10
+/// CAST: run-level header with calibration source orientation
 typedef struct
 {
     uint16_t type;
@@ -113,6 +122,7 @@ typedef struct
     float rope_err[MAX_ROPES];
 } CAST;
 
+/// CAAC: run-level header with AV orientation
 typedef struct
 {
     uint16_t type;
@@ -121,9 +131,6 @@ typedef struct
     float av_rope_length[7];
 } CAAC;
 
-#define BUFFER_SIZE 10000
-#define NUM_OF_ELEMS (BUFFER_SIZE-1)
-
 /** Ring FIFO buffer
  *
  *  Data (keys) stored as void*, type given in field type, as defined in enum
@@ -131,6 +138,9 @@ typedef struct
  *
  *  Based on example found at http://en.wikipedia.org/wiki/Circular_buffer.
  */
+
+#define BUFFER_SIZE 10000
+#define NUM_OF_ELEMS (BUFFER_SIZE-1)
 
 typedef enum {
     EMPTY,
@@ -144,22 +154,32 @@ typedef enum {
 
 typedef struct
 {
-    uint64_t end;
-    uint64_t start;
+    uint64_t write;
+    uint64_t read;
     uint64_t offset; // index-gtid offset (first gtid)
     uint64_t size;
     void** keys;
     RecordType* type;
     pthread_mutex_t mutex;
 } Buffer;
- 
+
+// allocate memory for and initialize a ring buffer
 Buffer* buffer_alloc(Buffer** pb, int size);
+
+// print buffer status information for debugging
+void buffer_status(Buffer* b);
+
+// re-initialize a buffer; frees memory held by (pointer) elements
+void buffer_clear(Buffer* b);
+
+// get an element out of the buffer at gtid id
+int buffer_at(Buffer* b, unsigned int id, RecordType* type, void** pk);
+
+// insert an element into the buffer at gtid id
+int buffer_insert(Buffer* b, unsigned int id, RecordType type, void* pk);
+
 int buffer_isfull(Buffer* b);
 int buffer_isempty(Buffer* b);
 int buffer_push(Buffer* b, RecordType type, void* key);
 int buffer_pop(Buffer* b, RecordType* type, void** pk);
-void buffer_status(Buffer* b);
-void buffer_clear(Buffer* b);
-int buffer_at(Buffer* b, unsigned int id, RecordType* type, void** pk);
-int buffer_insert(Buffer* b, unsigned int id, RecordType type, void* pk);
 

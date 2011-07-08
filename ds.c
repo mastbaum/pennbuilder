@@ -49,8 +49,8 @@ Buffer* buffer_alloc(Buffer** pb, int size)
         printf("Initializing buffer: keys[%d] (%dKB allocated)\n", size, mem_allocated/1000);
         bzero(*pb, sizeof(*pb));
         (*pb)->size = size;
-        (*pb)->end = 0;
-        (*pb)->start  = 0;
+        (*pb)->write = 0;
+        (*pb)->read  = 0;
         (*pb)->offset = 0;
         pthread_mutex_init(&((*pb)->mutex), NULL);
     }
@@ -59,12 +59,12 @@ Buffer* buffer_alloc(Buffer** pb, int size)
  
 int buffer_isfull(Buffer* b)
 {
-    return (((b->end + 1) % b->size) == b->start);
+    return (((b->write + 1) % b->size) == b->read);
 }
  
 int buffer_isempty(Buffer* b)
 {
-    return (b->start == b->end);
+    return (b->read == b->write);
 }
  
 int buffer_push(Buffer* b, RecordType type, void* key)
@@ -73,10 +73,10 @@ int buffer_push(Buffer* b, RecordType type, void* key)
     int full = buffer_isfull(b);
     if(!full)
     {
-        b->keys[b->end] = key;
-        b->type[b->end] = type;
-        b->end++;
-        b->end %= b->size;
+        b->keys[b->write] = key;
+        b->type[b->write] = type;
+        b->write++;
+        b->write %= b->size;
     }
     pthread_mutex_unlock(&(b->mutex));
     return !full;
@@ -88,23 +88,22 @@ int buffer_pop(Buffer* b, RecordType* type, void** pk)
     int empty = buffer_isempty(b);
     if(!empty)
     {
-        (*pk) = b->keys[b->start];
-        (*type) = b->type[b->start];
-        b->keys[b->start] = NULL;
-        b->type[b->start] = 0;
-        b->start++; // note: you can pop a NULL pointer off the end
-        b->start %= b->size;
+        (*pk) = b->keys[b->read];
+        (*type) = b->type[b->read];
+        b->keys[b->read] = NULL;
+        b->type[b->read] = 0;
+        b->read++; // note: you can pop a NULL pointer off the end
+        b->read %= b->size;
     }
     pthread_mutex_unlock(&(b->mutex));
-    //printf("%lu %lu\n", b->start, b->end);
     return !empty;
 }
 
 void buffer_status(Buffer* b)
 {
     printf("Buffer at %p:\n", b);
-    printf("  write: %lu, read: %lu, full: %d, empty: %d\n", b->end,
-                                                             b->start,
+    printf("  write: %lu, read: %lu, full: %d, empty: %d\n", b->write,
+                                                             b->read,
                                                              buffer_isfull(b),
                                                              buffer_isempty(b));
 }
@@ -119,8 +118,8 @@ void buffer_clear(Buffer* b)
         b->keys[i] = NULL;
         b->type[i] = 0;
     }
-    b->end = 0;
-    b->start = 0;
+    b->write = 0;
+    b->read = 0;
     pthread_mutex_unlock(&(b->mutex));
 }
 
@@ -143,14 +142,8 @@ int buffer_insert(Buffer* b, unsigned int id, RecordType type, void* pk)
     if(!b->keys[keyid]) {
         b->type[keyid] = type;
         b->keys[keyid] = pk;
-        b->end = keyid;
-        b->end %= b->size;
-        // since it's a ring buffer, we don't really know if we received data
-        // for an already-shipped event, since write<read when we near the end
-        // need another list if we want to check...
-        //if(keyid < b->start) {
-            //printf("buffer_insert: got record with id %i < read position %lu\n", keyid, b->start);
-        //}
+        b->write = keyid;
+        b->write %= b->size;
         pthread_mutex_unlock(&(b->mutex));
         return 0;
     }

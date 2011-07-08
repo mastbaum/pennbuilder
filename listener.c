@@ -29,7 +29,6 @@ void handler(int signal)
 {
     if(signal == SIGINT) {
         printf("\nCaught CTRL-C (SIGINT), Exiting...\n");
-        close_sockets();
         if(!buffer_isempty(event_buffer)) {
             printf("Warning: exiting with non-empty event buffer\n");
             buffer_status(event_buffer);
@@ -42,7 +41,9 @@ void handler(int signal)
             printf("Warning: exiting with non-empty run header buffer\n");
             buffer_status(run_header_buffer);
         }
-        printf("closing run file\n");
+        printf("Closing sockets...\n");
+        close_sockets();
+        printf("Closing run file...\n");
         fclose(outfile);
         exit(0);
     }
@@ -120,10 +121,9 @@ void accept_xl3packet(void* packet_buffer)
 
         if(gtid > last_gtid[pmtid])
             last_gtid[pmtid] = (uint32_t)gtid;
-        if(gtid < last_gtid[pmtid]){
-            printf("warning! got gtid %d on pmt %d, is < last_gtid %d\n", gtid, pmtid, last_gtid[pmtid]);
-            //exit(1);
-        }
+        if(gtid < last_gtid[pmtid])
+            printf("Warning! Got GTID %d on pmt %d, is < last_gtid %d\n", gtid, pmtid, last_gtid[pmtid]);
+
         Event* e;
         RecordType r;
         buffer_at(event_buffer, gtid, &r, (void*)&e);
@@ -137,7 +137,7 @@ void accept_xl3packet(void* packet_buffer)
         }
 
         if(e && e->gtid!=gtid) {
-            printf("Cannot trample buffer! Ignoring GTID %i\n", gtid);
+            printf("Buffer overflow! Ignoring GTID %i\n", gtid);
             continue;
         }
 
@@ -229,7 +229,7 @@ void* listener(void* ptr)
         if(newsockfd < 0) die("ERROR on accept");
         else {
             thread_sockfd[thread_index] = newsockfd;
-            printf("spawning thread with index %i\n", thread_index);
+            printf("Spawning listener_child thread with index %i\n", thread_index);
             pthread_create(&(threads[thread_index]),
                     NULL,
                     listener_child,

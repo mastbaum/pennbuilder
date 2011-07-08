@@ -22,7 +22,16 @@ uint16_t crate_skipped[NCRATES];
 
 void accept_xl3packet(void* packet_buffer);
 
-typedef enum { XL3_PACKET, MTC_PACKET, CAEN_PACKET, TRIG_PACKET, EPED_PACKET, RHDR_PACKET, CAST_PACKET, CAAC_PACKET } PacketType;
+typedef enum {
+    XL3_PACKET,
+    MTC_PACKET,
+    CAEN_PACKET,
+    TRIG_PACKET,
+    EPED_PACKET,
+    RHDR_PACKET,
+    CAST_PACKET,
+    CAAC_PACKET
+} PacketType;
 
 typedef struct
 {
