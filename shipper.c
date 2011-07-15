@@ -71,8 +71,9 @@ void* shipper(void* ptr)
 
         if(etemp) {
             struct timespec time_event = etemp->builder_arrival_time;
-            if(etemp->gtid > min_gtid && tdiff(time_now, time_event).tv_sec < 1)
+            if(etemp->gtid > min_gtid && tdiff(time_now, time_event).tv_sec < 1) {
                 continue;
+            }
         }
 
         // loop through run headers looking for an RHDR
@@ -189,8 +190,8 @@ void* shipper(void* ptr)
         Event* e;
         RecordType r;
         buffer_pop(event_buffer, &r, (void*)&e);
-        if(!e) { printf("popped null pointer\n"); exit(1); }
-        //printf("popping e: %p, gtid %i\n", e, e->gtid);
+        if(!e) { printf("popped null pointer\n"); }
+        printf("popping e: %p, gtid %i\n", e, e->gtid);
         CDABHeader cdh;
         cdh.record_type = DETECTOR_EVENT;
         cdh.size = sizeof(Event);

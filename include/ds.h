@@ -139,9 +139,6 @@ typedef struct
  *  Based on example found at http://en.wikipedia.org/wiki/Circular_buffer.
  */
 
-#define BUFFER_SIZE 10000
-#define NUM_OF_ELEMS (BUFFER_SIZE-1)
-
 typedef enum {
     EMPTY,
     DETECTOR_EVENT,
@@ -160,7 +157,12 @@ typedef struct
     uint64_t size;
     void** keys;
     RecordType* type;
-    pthread_mutex_t mutex;
+
+    pthread_mutex_t* mutex_buffer; // lock elements individually
+    pthread_mutex_t mutex_write;
+    pthread_mutex_t mutex_read;
+    pthread_mutex_t mutex_offset;
+    pthread_mutex_t mutex_size;
 } Buffer;
 
 // allocate memory for and initialize a ring buffer
@@ -172,10 +174,13 @@ void buffer_status(Buffer* b);
 // re-initialize a buffer; frees memory held by (pointer) elements
 void buffer_clear(Buffer* b);
 
+// returns the array index corresponding to gtid id
+inline uint64_t buffer_keyid(Buffer* b, unsigned int id);
+
 // get an element out of the buffer at gtid id
 int buffer_at(Buffer* b, unsigned int id, RecordType* type, void** pk);
 
-// insert an element into the buffer at gtid id
+// insert an element into the buffer at gtid id. mutex locking done by user.
 int buffer_insert(Buffer* b, unsigned int id, RecordType type, void* pk);
 
 int buffer_isfull(Buffer* b);
