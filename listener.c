@@ -223,7 +223,7 @@ void* listener(void* ptr)
     clilen = sizeof(cli_addr);
     signal(SIGINT, &handler);
     pthread_t threads[NUM_THREADS];
-    int thread_index = 0; //FIXME: want NUM_THREADS currently, not cumulative
+    int thread_index = 0;
     while(1) {
         int newsockfd = accept(sockfd, (struct sockaddr*) &cli_addr, &clilen);
         if(newsockfd < 0) die("ERROR on accept");
