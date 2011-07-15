@@ -6,18 +6,19 @@ CLI_SRCS = $(CLI_OBJS:.o=.c)
 INCDIR = include
 CFLAGS = -I$(INCDIR)
 CXXFLAGS = 
+LFLAGS = -L/usr/local/lib
 
 CC = gcc
 
-LIBS = -ljemalloc -lpthread -lrt
+LIBS = -ljemalloc -pthread -lrt
 
 all: event_builder client
 
 event_builder: $(EVB_OBJS)
-	$(CC) -o $@ $(EVB_OBJS) $(LIBS) $(INCLUDE) $(CXXFLAGS)
+	$(CC) -o $@ $(EVB_OBJS) $(LFLAGS) $(LIBS) $(INCLUDE) $(CXXFLAGS)
 
 client: $(CLI_OBJS)
-	$(CC) -o $@ $(CLI_OBJS) $(LIBS) $(INCLUDE) $(CXXFLAGS)
+	$(CC) -o $@ $(CLI_OBJS) $(LFLAGS) $(LIBS) $(INCLUDE) $(CXXFLAGS)
 
 clean: 
 	-$(RM) core *.o

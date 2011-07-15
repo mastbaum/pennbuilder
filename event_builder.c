@@ -16,10 +16,15 @@
  *  Andy Mastbaum (mastbaum@hep.upenn.edu), June 2011
  */ 
 
+#define EVENT_BUFFER_SIZE 10000
+#define EVENT_HEADER_BUFFER_SIZE 50
+#define RUN_HEADER_BUFFER_SIZE 20
+
 Buffer* event_buffer;
 Buffer* event_header_buffer;
 Buffer* run_header_buffer;
 uint32_t last_gtid[NPMTS];
+pthread_mutex_t mutex_last_gtid; // make array if slow
 
 int main(int argc, char *argv[])
 {
@@ -32,10 +37,11 @@ int main(int argc, char *argv[])
         port = atoi(argv[1]);
 
     // initialization
-    buffer_alloc(&event_buffer, 10000);
-    buffer_alloc(&event_header_buffer, 50);
-    buffer_alloc(&run_header_buffer, 20);
+    buffer_alloc(&event_buffer, EVENT_BUFFER_SIZE);
+    buffer_alloc(&event_header_buffer, EVENT_HEADER_BUFFER_SIZE);
+    buffer_alloc(&run_header_buffer, RUN_HEADER_BUFFER_SIZE);
     memset(&last_gtid, 0, NPMTS*sizeof(uint32_t));
+    pthread_mutex_init(&mutex_last_gtid, NULL);
 
     // fake RHDR for testing
     RHDR* rh = malloc(sizeof(RHDR));
@@ -52,19 +58,6 @@ int main(int argc, char *argv[])
     // wait for threads to join before exiting
     pthread_join(tlistener, NULL);
     pthread_join(tshipper, NULL);
-
-    // cleanup
-    buffer_status(event_buffer);
-    buffer_clear(event_buffer);
-    free(event_buffer);
-
-    buffer_status(event_header_buffer);
-    buffer_clear(event_header_buffer);
-    free(event_header_buffer);
-
-    buffer_status(run_header_buffer);
-    buffer_clear(run_header_buffer);
-    free(run_header_buffer);
 
     return 0;
 }

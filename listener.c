@@ -15,6 +15,7 @@ extern Buffer* event_buffer;
 extern Buffer* event_header_buffer;
 extern Buffer* run_header_buffer;
 extern uint32_t last_gtid[NPMTS];
+extern pthread_mutex_t mutex_last_gtid;
 extern FILE* outfile;
 
 void close_sockets()
@@ -66,6 +67,7 @@ void accept_xl3packet(void* packet_buffer)
     PMTBundle* pmtb = (PMTBundle*) (p->payload);
     for(ibundle=0; ibundle<nbundles; ibundle++) {
         uint32_t gtid = pmtbundle_gtid(pmtb) + p->cmdHeader.packet_num + (p->cmdHeader.packet_type<<16);
+        uint64_t keyid = buffer_keyid(event_buffer, gtid);
         uint32_t chan = get_bits(pmtb->word[0], 16, 5);
         uint32_t card = get_bits(pmtb->word[0], 26, 4);
         uint32_t crate = get_bits(pmtb->word[0], 21, 5);
@@ -78,9 +80,12 @@ void accept_xl3packet(void* packet_buffer)
         for (icard = read_pos[crate]+1;icard<last_card;icard++){
            uint32_t first_pmtid = 512*crate+32*icard;
            int ipmtid;
-           for (ipmtid = first_pmtid; ipmtid<first_pmtid+32;ipmtid++)
-               if (crate_gtid_last[crate] > last_gtid[ipmtid])
+           for (ipmtid = first_pmtid; ipmtid<first_pmtid+32 && ipmtid<NPMTS;ipmtid++)
+               if (crate_gtid_last[crate] > last_gtid[ipmtid]) {
+                   pthread_mutex_lock(&mutex_last_gtid);
                    last_gtid[ipmtid] = crate_gtid_last[crate];
+                   pthread_mutex_unlock(&mutex_last_gtid);
+               }
         }
         crate_gtid_last[crate] = gtid;
         read_pos[crate] = card;
@@ -95,8 +100,11 @@ void accept_xl3packet(void* packet_buffer)
                 if((1<<icard) & crate_skipped[crate]) {
                     uint32_t first_pmtid = 512*crate + 32*card;
                     int ipmtid;
-                    for(ipmtid=first_pmtid; ipmtid<first_pmtid+32; ipmtid++) 
+                    pthread_mutex_lock(&mutex_last_gtid);
+                    for(ipmtid=first_pmtid; ipmtid<first_pmtid+32; ipmtid++) {
                         last_gtid[ipmtid] = crate_gtid_last[crate];
+                    }
+                    pthread_mutex_lock(&mutex_last_gtid);
                     if(crate_gtid_current[crate] > crate_gtid_last[crate])
                         crate_gtid_last[crate] = crate_gtid_current[crate];
                     crate_skipped[crate] = 1<<card;
@@ -114,19 +122,26 @@ void accept_xl3packet(void* packet_buffer)
         for(ichan=seq_pos[crate][card]+1; ichan<last_chan; ichan++) {
             int ch = ichan % 32;
             uint32_t ccid = 512*crate + 32*card;
-            if (last_gtid[ccid+seq_pos[crate][card]] > last_gtid[ccid + ch])
+            if (last_gtid[ccid+seq_pos[crate][card]] > last_gtid[ccid + ch]) {
+                pthread_mutex_lock(&mutex_last_gtid);
                 last_gtid[ccid + ch] = last_gtid[ccid + seq_pos[crate][card]];
+                pthread_mutex_unlock(&mutex_last_gtid);
+            }
         }
         seq_pos[crate][card] = chan;
 
-        if(gtid > last_gtid[pmtid])
+        if(gtid > last_gtid[pmtid]) {
+            pthread_mutex_lock(&mutex_last_gtid);
             last_gtid[pmtid] = (uint32_t)gtid;
+            pthread_mutex_unlock(&mutex_last_gtid);
+        }
         if(gtid < last_gtid[pmtid])
             printf("Warning! Got GTID %d on pmt %d, is < last_gtid %d\n", gtid, pmtid, last_gtid[pmtid]);
 
         Event* e;
         RecordType r;
         buffer_at(event_buffer, gtid, &r, (void*)&e);
+        pthread_mutex_lock(&(event_buffer->mutex_buffer[keyid]));
         if(!e) {
             e = malloc(sizeof(Event));
             e->gtid = gtid;
@@ -135,6 +150,7 @@ void accept_xl3packet(void* packet_buffer)
             e->builder_arrival_time = t;
             buffer_insert(event_buffer, gtid, DETECTOR_EVENT, (void*)e);
         }
+        pthread_mutex_unlock(&(event_buffer->mutex_buffer[keyid]));
 
         if(e && e->gtid!=gtid) {
             printf("Buffer overflow! Ignoring GTID %i\n", gtid);
@@ -142,9 +158,9 @@ void accept_xl3packet(void* packet_buffer)
         }
 
         e->pmt[pmtid] = *pmtb;
-        pthread_mutex_lock(&(event_buffer->mutex));
+        pthread_mutex_lock(&(event_buffer->mutex_buffer[keyid]));
         e->nhits++;
-        pthread_mutex_unlock(&(event_buffer->mutex));
+        pthread_mutex_unlock(&(event_buffer->mutex_buffer[keyid]));
         pmtb++;
     }
 }

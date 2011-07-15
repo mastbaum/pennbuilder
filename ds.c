@@ -44,32 +44,42 @@ Buffer* buffer_alloc(Buffer** pb, int size)
     *pb = malloc(sizeof(Buffer));
     (*pb)->keys = malloc(size * sizeof(void*));
     (*pb)->type = malloc(size * sizeof(RecordType));
-    int mem_allocated = sizeof(Buffer) + size * (sizeof(void*) + sizeof(RecordType));
+    (*pb)->mutex_buffer = malloc(size* sizeof(pthread_mutex_t));
+    int mem_allocated = sizeof(Buffer) + size * (sizeof(void*) + sizeof(RecordType) + sizeof(pthread_mutex_t));
     if(*pb) {
-        printf("Initializing buffer: keys[%d] (%dKB allocated)\n", size, mem_allocated/1000);
+        printf("Initializing buffer: keys[%d] (%d KB allocated)\n", size, mem_allocated/1000);
         bzero(*pb, sizeof(*pb));
         (*pb)->size = size;
         (*pb)->write = 0;
         (*pb)->read  = 0;
         (*pb)->offset = 0;
-        pthread_mutex_init(&((*pb)->mutex), NULL);
+
+        int i;
+        for(i=0; i<(*pb)->size; i++)
+            pthread_mutex_init(&((*pb)->mutex_buffer[i]), NULL);
+        pthread_mutex_init(&((*pb)->mutex_write), NULL);
+        pthread_mutex_init(&((*pb)->mutex_read), NULL);
+        pthread_mutex_init(&((*pb)->mutex_offset), NULL);
+        pthread_mutex_init(&((*pb)->mutex_size), NULL);
     }
     return *pb;
 }
  
-int buffer_isfull(Buffer* b)
+inline int buffer_isfull(Buffer* b)
 {
     return (((b->write + 1) % b->size) == b->read);
 }
  
-int buffer_isempty(Buffer* b)
+inline int buffer_isempty(Buffer* b)
 {
     return (b->read == b->write);
 }
  
 int buffer_push(Buffer* b, RecordType type, void* key)
 {
-    pthread_mutex_lock(&(b->mutex));
+    pthread_mutex_lock(&(b->mutex_write));
+    pthread_mutex_lock(&(b->mutex_buffer[b->write]));
+    uint64_t write_old = b->write;
     int full = buffer_isfull(b);
     if(!full)
     {
@@ -78,13 +88,16 @@ int buffer_push(Buffer* b, RecordType type, void* key)
         b->write++;
         b->write %= b->size;
     }
-    pthread_mutex_unlock(&(b->mutex));
+    pthread_mutex_unlock(&(b->mutex_write));
+    pthread_mutex_unlock(&(b->mutex_buffer[write_old]));
     return !full;
 }
 
 int buffer_pop(Buffer* b, RecordType* type, void** pk)
 {
-    pthread_mutex_lock(&(b->mutex));
+    pthread_mutex_lock(&(b->mutex_read));
+    pthread_mutex_lock(&(b->mutex_buffer[b->read]));
+    uint64_t read_old = b->read;
     int empty = buffer_isempty(b);
     if(!empty)
     {
@@ -95,7 +108,8 @@ int buffer_pop(Buffer* b, RecordType* type, void** pk)
         b->read++; // note: you can pop a NULL pointer off the end
         b->read %= b->size;
     }
-    pthread_mutex_unlock(&(b->mutex));
+    pthread_mutex_unlock(&(b->mutex_read));
+    pthread_mutex_unlock(&(b->mutex_buffer[read_old]));
     return !empty;
 }
 
@@ -110,8 +124,12 @@ void buffer_status(Buffer* b)
 
 void buffer_clear(Buffer* b)
 {
-    pthread_mutex_lock(&(b->mutex));
+    pthread_mutex_lock(&(b->mutex_write));
+    pthread_mutex_lock(&(b->mutex_read));
     int i;
+    for(i=0; i<b->size; i++)
+        pthread_mutex_lock(&(b->mutex_buffer[i]));
+
     for(i=0; i<b->size; i++) {
         if(b->keys[i] != NULL)
             free(b->keys[i]);
@@ -120,12 +138,21 @@ void buffer_clear(Buffer* b)
     }
     b->write = 0;
     b->read = 0;
-    pthread_mutex_unlock(&(b->mutex));
+
+    pthread_mutex_unlock(&(b->mutex_write));
+    pthread_mutex_unlock(&(b->mutex_read));
+    for(i=0; i<b->size; i++)
+        pthread_mutex_unlock(&(b->mutex_buffer[i]));
+}
+
+inline uint64_t buffer_keyid(Buffer* b, unsigned int id)
+{
+    return (id - b->offset) % b->size;
 }
 
 int buffer_at(Buffer* b, unsigned int id, RecordType* type, void** pk)
 {
-    int keyid = (id - b->offset) % b->size;
+    int keyid = buffer_keyid(b, id);
     if (keyid < b->size) {
         *type = b->type[keyid];
         *pk = b->keys[keyid];
@@ -137,19 +164,15 @@ int buffer_at(Buffer* b, unsigned int id, RecordType* type, void** pk)
 
 int buffer_insert(Buffer* b, unsigned int id, RecordType type, void* pk)
 {
-    pthread_mutex_lock(&(b->mutex));
-    int keyid = (id - b->offset) % b->size;
+    int keyid = buffer_keyid(b, id);
     if(!b->keys[keyid]) {
         b->type[keyid] = type;
         b->keys[keyid] = pk;
         b->write = keyid;
         b->write %= b->size;
-        pthread_mutex_unlock(&(b->mutex));
         return 0;
     }
-    else {
-        pthread_mutex_unlock(&(b->mutex));
+    else
         return 1;
-    }
 }
 
