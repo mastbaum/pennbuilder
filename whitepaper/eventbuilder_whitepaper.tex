@@ -39,7 +39,7 @@ For example, the detector event buffer is structured as follows:
 \item[...] $\times$ buffer length
 \end{description}
 \end{description}
-Given the (stored) offset between global trigger ID (GTID) and buffer index, data arriving from an XL3 may be slotted into the proper place without any looping. For example, a packet representing data from PMT 37 associated with GTID 42 is stored in {\tt Buffer[42].PMTBundle[37]}. Notably, this is the only way to detect whether a second PMTBundle has arrived for this GTID/PMTID -- an occasional problem with front-end electronics -- without costly looping.
+Given the (stored) offset between global trigger ID (GTID) and buffer index, data arriving from an XL3 may be slotted into the proper place without any looping. For example, the $i$th packet representing PMT data associated with GTID 42 is stored in {\tt Buffer[42].PMTBundle[i]}. With this model, it is impossible to detect whether a second PMTBundle has arrived for this GTID/PMTID -- an occasional problem with front-end electronics -- without costly looping. Hence, that is left for the RAT input producer or data cleaning cuts to handle.
 
 The internal data structures {\tt PMTBundle}, {\tt MTCData}, and {\tt CAENData} are identical to those used by the front end (XL3), obviating any translation. The detector event, run-level header, and event-level header structure match the specification given in RAT's DS::PackedEvent.
 
@@ -52,11 +52,11 @@ The event builder must buffer relatively few run- and event-level headers, and s
 \item[MTCData] 192 bits + unknown, small contribution from TUBII
 \item[CAENData] 8 channels $\times$ 100 samples $\times$ 16-bit short = 12.8k bits
 \end{description}
-An event with 9728 hits thus consumes at least 120 KB. Hence, a PC with a relatively modest 24 GB of memory could buffer just over 200000 events, or 3.5 minutes of triggering at 1 kHz.
+An event with 9728 hits thus consumes at least 120 KB. Hence, a PC with a relatively modest 24 GB of memory could buffer just over 200000 `full-hit' events, or 3.5 minutes of triggering at 1 kHz.
 
 It is possible to improve this number by noting that events, on average, have approximately 1000 hit PMTs, not 10000. Given the 96 bit size of PMTBundles, it is more efficient for NHIT $<$ 3333 to store in the Event an array of 64-bit pointers to PMTBundles, and allocate on-demand. However, such an approach requires that the PMTBundle pointer array be flattened before writing to disk or a socket, a time-consuming task. Additionally, memory allocators must store some metadata to keep track of allocations, and hence typically have a fixed per-allocation overhead, disincentivizing many small allocations. The standard GNU glibc malloc commonly used in Linux programming, for example, has a 4 byte overhead on each alloation, meaning that replacing PMTBundles with pointers may actually double the data stored: a 64-bit pointer + 32 bit malloc overhead + the original 96 bit data = 192 bits consumed.
 
-In light of these concerns, this event builder allocates space for $19\times16\times32$ PMTs for every event. Only filled structures are written to disk, and output is additionally gzip-compressed on-the-fly with zlibc.
+This event builder allocates space for PMT Bundles only as necessary, and tracks the number received (NHIT). Only filled structures are written to disk, and output is additionally gzip-compressed on-the-fly with zlibc.
 
 A final memory-management concern is allocator performance in a thread-based environment. GNU glibc predates Linux pthreads, and performs quite poorly when multiple threads compete for memory access. Fortunately, alternative memory allocators exist with vastly superior performance in threaded applications as well as drastically lower per-allocation overhead. The event builder uses {\tt jemalloc}\footnote{\href{http://www.canonware.com/jemalloc/}{http://www.canonware.com/jemalloc/}}, the system allocator from FreeBSD which was recently optimized by engineers at FreeBSD and Facebook, in place of glibc. {\tt jemalloc} offers approximately 2\% overhead.
 
@@ -95,7 +95,7 @@ The event builder is optimized for use in a Linux or UNIX environment running on
 The event builder has been tested using fake data derived from a RAT simulation and put through a sequencer/XL3 simulator that randomizes GTID order and inserts known ``glitches'' into the data stream. Figure \ref{pointers_2k} shows the state of the detector event buffer, demonstrating the shipper's behavior as events are finished and written to disk.
 \begin{figure}[htp]
 \centering
-\includegraphics[scale=0.6]{figures/buffer_io_2k.pdf}
+%\includegraphics[scale=0.6]{figures/buffer_io_2k.pdf}
 \caption{Detector event buffer status}
 \label{pointers_2k}
 \end{figure}
