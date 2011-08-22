@@ -39,7 +39,7 @@ For example, the detector event buffer is structured as follows:
 \item[...] $\times$ buffer length
 \end{description}
 \end{description}
-Given the (stored) offset between global trigger ID (GTID) and buffer index, data arriving from an XL3 may be slotted into the proper place without any looping. For example, a packet representing data from PMT 37 associated with GTID 42 is stored in {\tt Buffer[42].PMTBundle[37]}.
+Given the (stored) offset between global trigger ID (GTID) and buffer index, data arriving from an XL3 may be slotted into the proper place without any looping. For example, a packet representing data from PMT 37 associated with GTID 42 is stored in {\tt Buffer[42].PMTBundle[37]}. Notably, this is the only way to detect whether a second PMTBundle has arrived for this GTID/PMTID -- an occasional problem with front-end electronics -- without costly looping.
 
 The internal data structures {\tt PMTBundle}, {\tt MTCData}, and {\tt CAENData} are identical to those used by the front end (XL3), obviating any translation. The detector event, run-level header, and event-level header structure match the specification given in RAT's DS::PackedEvent.
 
@@ -56,7 +56,7 @@ An event with 9728 hits thus consumes at least 120 KB. Hence, a PC with a relati
 
 It is possible to improve this number by noting that events, on average, have approximately 1000 hit PMTs, not 10000. Given the 96 bit size of PMTBundles, it is more efficient for NHIT $<$ 3333 to store in the Event an array of 64-bit pointers to PMTBundles, and allocate on-demand. However, such an approach requires that the PMTBundle pointer array be flattened before writing to disk or a socket, a time-consuming task. Additionally, memory allocators must store some metadata to keep track of allocations, and hence typically have a fixed per-allocation overhead, disincentivizing many small allocations. The standard GNU glibc malloc commonly used in Linux programming, for example, has a 4 byte overhead on each alloation, meaning that replacing PMTBundles with pointers may actually double the data stored: a 64-bit pointer + 32 bit malloc overhead + the original 96 bit data = 192 bits consumed.
 
-In light of these concerns, this event builder allocates space for $19\times16\times32$ PMTs for every event. Structures written to disk are hence largely empty; on-the-fly gzip compression with zlibc results in files of the expected size given N hits.
+In light of these concerns, this event builder allocates space for $19\times16\times32$ PMTs for every event. Only filled structures are written to disk, and output is additionally gzip-compressed on-the-fly with zlibc.
 
 A final memory-management concern is allocator performance in a thread-based environment. GNU glibc predates Linux pthreads, and performs quite poorly when multiple threads compete for memory access. Fortunately, alternative memory allocators exist with vastly superior performance in threaded applications as well as drastically lower per-allocation overhead. The event builder uses {\tt jemalloc}\footnote{\href{http://www.canonware.com/jemalloc/}{http://www.canonware.com/jemalloc/}}, the system allocator from FreeBSD which was recently optimized by engineers at FreeBSD and Facebook, in place of glibc. {\tt jemalloc} offers approximately 2\% overhead.
 
@@ -79,9 +79,8 @@ Headers and events are serially written:
 \subsection{CDAB Packed Binary Format}
 The packed binary format, CDAB, consists of C structures written directly to disk with gzip compression. This format is space efficient, fast, and most importantly, requires minimal CPU time. The C structures may be serialized for enhanced portability if it is deemed necessary. As implemented, CDAB is similar in spirit to SNO's ZDAB format, which were based on Fortran ZEBRA structures written to disk in binary form.
 
-CDAB format is preferable to ROOT for several reasons. First, writing ROOT files with the event builder requires that the builder link to ROOT libraries. This adds substatial overhead to what should be an extraordinarily lightweight program. Second, ROOT I/O calls C I/O at a low level. Hence it is necessarily slower to write the same data to disk with ROOT than with a C fwrite(). Third, ROOT trees require a small but nonzero amount of storage overhead for metadata. C structures are stored with no overhead.
-
-The present nominal packed format for SNO+ abuses the ROOT TTree to create a serial arbitrary object store: each ``event'' in the tree may be detector event data or one of the several types of run headers. Hence, since events are not identical, would-be features such as TTree::Draw cannot be used to display data from packed ROOT format. Serial data streams were not the intended use of TTrees; they are much better-implemented in a traditional binary file such as ZDAB or CDAB.
+\subsection{ROOT Output Format}
+By decision of SNO+ working groups, built events are to be written out in ROOT TTrees. ROOT files provide some advantages over plain C binary, including built-in MD5 checksumming and convenient analysis features such as interactive histogramming. As ROOT I/O requires C++, translation from the event builder's internal CDAB structure to ROOT occurs in a separate output processor. Inter-process communication between the builder and the ROOTifier is done through \href{http://www.zeromq.org/}{ZeroMQ}, a fast sockets replacement.
 
 \subsection{Threads}
 To leverage modern commodity multiprocessing, the event builder makes heavy use of POSIX threads (pthreads). The main event builder process spawns two threads at startup: the listener and the shipper. When the listener accepts an incoming connection, it opens a new port for communication and launches a new thread. In this way, each XL3 is communicating with a single thread. As noted in the introduction, performance is best when the event builder communicates directly with the XL3s; that is, when they are not hidden behind a single DAQ computer.
