@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <pthread.h>
-#include <jemalloc/jemalloc.h>
+//#include <jemalloc/jemalloc.h>
 #include "listener.h"
 #include "shipper.h"
 #include "ds.h"
@@ -23,8 +23,6 @@
 Buffer* event_buffer;
 Buffer* event_header_buffer;
 Buffer* run_header_buffer;
-uint32_t last_gtid[NPMTS];
-pthread_mutex_t mutex_last_gtid; // make array if slow
 
 int main(int argc, char *argv[])
 {
@@ -40,8 +38,6 @@ int main(int argc, char *argv[])
     buffer_alloc(&event_buffer, EVENT_BUFFER_SIZE);
     buffer_alloc(&event_header_buffer, EVENT_HEADER_BUFFER_SIZE);
     buffer_alloc(&run_header_buffer, RUN_HEADER_BUFFER_SIZE);
-    memset(&last_gtid, 0, NPMTS*sizeof(uint32_t));
-    pthread_mutex_init(&mutex_last_gtid, NULL);
 
     // fake RHDR for testing
     RHDR* rh = malloc(sizeof(RHDR));

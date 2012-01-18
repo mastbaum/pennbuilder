@@ -9,69 +9,46 @@
 #include <signal.h>
 #include <time.h>
 #include <limits.h>
-#include <jemalloc/jemalloc.h>
+//#include <jemalloc/jemalloc.h>
 #include "shipper.h"
 #include "ds.h"
 
 extern Buffer* event_buffer;
 extern Buffer* event_header_buffer;
 extern Buffer* run_header_buffer;
-extern uint32_t last_gtid[NPMTS];
 
 void handler(int signal);
 
 FILE* outfile;
 
-struct timespec tdiff(struct timespec start, struct timespec end)
-{
-    struct timespec temp;
-    if ((end.tv_nsec-start.tv_nsec)<0) {
-        temp.tv_sec = end.tv_sec-start.tv_sec-1;
-        temp.tv_nsec = 1000000000+end.tv_nsec-start.tv_nsec;
-    } else {
-        temp.tv_sec = end.tv_sec-start.tv_sec;
-        temp.tv_nsec = end.tv_nsec-start.tv_nsec;
-    }
-    return temp;
-}
-
 void* shipper(void* ptr)
 {
-    struct timespec time_now;
-    struct timespec time_last_shipped;
-    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &time_last_shipped);
+    clock_t time_now;
+    clock_t time_last_shipped;
+    time_last_shipped = clock();
     outfile = NULL;
     char filename[100];
     int run_active = 0;
 
     signal(SIGINT, &handler);
     while(1) {
-        uint32_t min_gtid = UINT_MAX;
-        uint32_t min_pmt = 0;
-        uint32_t ipmt;
-        for(ipmt=0; ipmt<NPMTS; ipmt++)
-            if(min_gtid > last_gtid[ipmt]) { // && pmt_enabled[pmtid]
-                min_gtid = last_gtid[ipmt];
-                min_pmt = ipmt;
-            }
-
-        //printf("min_gtid = %i, min_pmt = %i\n",min_gtid,min_pmt);
-
-        clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &time_now);
+        time_now = clock();
         Event* etemp = (Event*) event_buffer->keys[event_buffer->read];
 
         // skipped gtid timeout
         if(!etemp) {
-            if(tdiff(time_now, time_last_shipped).tv_sec > 1) {
+            if((float)(time_now - time_last_shipped) / CLOCKS_PER_SEC > 0.5) {
                 RecordType rtemp;
                 buffer_pop(event_buffer, &rtemp, (void*)&etemp);
+		time_last_shipped = clock();
+                printf("Skipped gtid after timeout\n");
             }
             continue;
         }
 
         if(etemp) {
-            struct timespec time_event = etemp->builder_arrival_time;
-            if(etemp->gtid > min_gtid && tdiff(time_now, time_event).tv_sec < 1) {
+	    clock_t time_event = etemp->builder_arrival_time;
+            if((float)(time_now - time_event) / CLOCKS_PER_SEC < 1) {
                 continue;
             }
         }
@@ -189,17 +166,22 @@ void* shipper(void* ptr)
         // finally, ship the event data
         Event* e;
         RecordType r;
-        buffer_pop(event_buffer, &r, (void*)&e);
-        if(!e) { printf("popped null pointer\n"); }
-        printf("popping e: %p, gtid %i\n", e, e->gtid);
-        CDABHeader cdh;
-        cdh.record_type = DETECTOR_EVENT;
-        cdh.size = sizeof(Event);
-        fwrite(&cdh, sizeof(CDABHeader), 1, outfile);
-        fwrite(e, sizeof(Event), 1, outfile);
-        free(e);
+        if (buffer_pop(event_buffer, &r, (void*)&e) == 1) {
+            if (!e) {
+                printf("popped null pointer\n"); 
+            }
+            else {
+                printf("popping e: %p, gtid %i\n", e, e->gtid);
+                CDABHeader cdh;
+                cdh.record_type = DETECTOR_EVENT;
+                cdh.size = sizeof(Event);
+                fwrite(&cdh, sizeof(CDABHeader), 1, outfile);
+                fwrite(e, sizeof(Event), 1, outfile);
 
-        clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &time_last_shipped);
+                free(e);
+            }
+        }
+        time_last_shipped = clock();
     }
 }
 

@@ -43,7 +43,7 @@ typedef struct
     MTCData mtc;
     CAENData caen;
     uint32_t gtid;
-    struct timespec builder_arrival_time;
+    clock_t builder_arrival_time;
     uint32_t run_id;
     uint32_t subrun_id;
     uint32_t nhits;

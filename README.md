@@ -7,6 +7,7 @@ pennbuilder is a fast, lightweight event builder for the SNO+ experiment. It was
 Installation
 ------------
 Dependencies:
+
 * C compiler. Only tested with GCC.
 * jemalloc library (http://www.canonware.com/jemalloc/)
 * pthreads library (-lpthread) (POSIX) 

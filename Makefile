@@ -5,12 +5,12 @@ CLI_SRCS = $(CLI_OBJS:.o=.c)
 
 INCDIR = include
 CFLAGS = -I$(INCDIR)
-CXXFLAGS = 
+CXXFLAGS = -g 
 LFLAGS = -L/usr/local/lib
 
-CC = gcc
+CC = gcc -g
 
-LIBS = -ljemalloc -pthread -lrt
+LIBS = -pthread -lrt
 
 all: event_builder client
 
