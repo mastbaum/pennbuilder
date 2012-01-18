@@ -7,15 +7,13 @@
 #include <pthread.h>
 #include <signal.h>
 #include <time.h>
-#include <jemalloc/jemalloc.h>
+//#include <jemalloc/jemalloc.h>
 #include "listener.h"
 #include "ds.h"
 
 extern Buffer* event_buffer;
 extern Buffer* event_header_buffer;
 extern Buffer* run_header_buffer;
-extern uint32_t last_gtid[NPMTS];
-extern pthread_mutex_t mutex_last_gtid;
 extern FILE* outfile;
 
 void close_sockets()
@@ -73,71 +71,6 @@ void accept_xl3packet(void* packet_buffer)
         uint32_t crate = get_bits(pmtb->word[0], 21, 5);
         uint32_t pmtid = 512*crate + 32*card + chan;
 
-        // fake to look more like the sequencer for demo purposes
-        int last_card = card >= read_pos[crate] ? card: card + NFECS;
-        //printf("read %d,%d (%d), last time was %d\n",crate,card,last_card,read_pos[crate]);
-        int icard;
-        for (icard = read_pos[crate]+1;icard<last_card;icard++){
-           uint32_t first_pmtid = 512*crate+32*icard;
-           int ipmtid;
-           for (ipmtid = first_pmtid; ipmtid<first_pmtid+32 && ipmtid<NPMTS;ipmtid++)
-               if (crate_gtid_last[crate] > last_gtid[ipmtid]) {
-                   pthread_mutex_lock(&mutex_last_gtid);
-                   last_gtid[ipmtid] = crate_gtid_last[crate];
-                   pthread_mutex_unlock(&mutex_last_gtid);
-               }
-        }
-        crate_gtid_last[crate] = gtid;
-        read_pos[crate] = card;
-
-        /*
-        // if we have skipped a card twice, the entire crate must be finished
-        // up to the gtid that card was on last, and we can update the 
-        // last_gtid array.
-        if(card <= read_pos[crate]) {
-            int icard;
-            for(icard=0; icard<NFECS; icard++)
-                if((1<<icard) & crate_skipped[crate]) {
-                    uint32_t first_pmtid = 512*crate + 32*card;
-                    int ipmtid;
-                    pthread_mutex_lock(&mutex_last_gtid);
-                    for(ipmtid=first_pmtid; ipmtid<first_pmtid+32; ipmtid++) {
-                        last_gtid[ipmtid] = crate_gtid_last[crate];
-                    }
-                    pthread_mutex_lock(&mutex_last_gtid);
-                    if(crate_gtid_current[crate] > crate_gtid_last[crate])
-                        crate_gtid_last[crate] = crate_gtid_current[crate];
-                    crate_skipped[crate] = 1<<card;
-                    read_pos[crate] = card;
-                }
-                if(gtid > crate_gtid_current[crate])
-                    crate_gtid_current[crate] = gtid;
-                crate_skipped[crate] |= 1<<card;
-                read_pos[crate] = card;
-        }
-        */ 
-        // similarly, look at sequencer skips
-        int last_chan = chan > seq_pos[crate][card] ? chan: chan + NCHANS;
-        int ichan;
-        for(ichan=seq_pos[crate][card]+1; ichan<last_chan; ichan++) {
-            int ch = ichan % 32;
-            uint32_t ccid = 512*crate + 32*card;
-            if (last_gtid[ccid+seq_pos[crate][card]] > last_gtid[ccid + ch]) {
-                pthread_mutex_lock(&mutex_last_gtid);
-                last_gtid[ccid + ch] = last_gtid[ccid + seq_pos[crate][card]];
-                pthread_mutex_unlock(&mutex_last_gtid);
-            }
-        }
-        seq_pos[crate][card] = chan;
-
-        if(gtid > last_gtid[pmtid]) {
-            pthread_mutex_lock(&mutex_last_gtid);
-            last_gtid[pmtid] = (uint32_t)gtid;
-            pthread_mutex_unlock(&mutex_last_gtid);
-        }
-        if(gtid < last_gtid[pmtid])
-            printf("Warning! Got GTID %d on pmt %d, is < last_gtid %d\n", gtid, pmtid, last_gtid[pmtid]);
-
         Event* e;
         RecordType r;
         buffer_at(event_buffer, gtid, &r, (void*)&e);
@@ -145,8 +78,7 @@ void accept_xl3packet(void* packet_buffer)
         if(!e) {
             e = malloc(sizeof(Event));
             e->gtid = gtid;
-            struct timespec t;
-            clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &t);
+            clock_t t = clock();
             e->builder_arrival_time = t;
             buffer_insert(event_buffer, gtid, DETECTOR_EVENT, (void*)e);
         }
@@ -176,11 +108,11 @@ void* listener_child(void* psock)
         int r = recv(sock, packet_buffer, MAX_BUFFER_LEN, 0);
         if(r<0) {
             die("Error reading from socket");
-            break;
+            return NULL;
         }
         else if(r==0) {
             printf("Client terminated connection on socket %i\n", sock);
-            break;
+            return NULL;
         }
         else {
             PacketType packet_type = ((PacketHeader*) packet_buffer)->type;
