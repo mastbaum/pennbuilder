@@ -10,7 +10,7 @@ LFLAGS = -L/usr/local/lib
 
 CC = gcc -g
 
-LIBS = -pthread -lrt
+LIBS = -ljemalloc -pthread -lrt
 
 all: event_builder client
 

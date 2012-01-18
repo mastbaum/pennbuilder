@@ -7,7 +7,7 @@
 #include <pthread.h>
 #include <signal.h>
 #include <time.h>
-//#include <jemalloc/jemalloc.h>
+#include <jemalloc/jemalloc.h>
 #include "listener.h"
 #include "ds.h"
 
