@@ -9,7 +9,7 @@
 #include <signal.h>
 #include <time.h>
 #include <limits.h>
-//#include <jemalloc/jemalloc.h>
+#include <jemalloc/jemalloc.h>
 #include "shipper.h"
 #include "ds.h"
 
@@ -171,7 +171,7 @@ void* shipper(void* ptr)
                 printf("popped null pointer\n"); 
             }
             else {
-                printf("popping e: %p, gtid %i\n", e, e->gtid);
+                //printf("popping e: %p, gtid %i\n", e, e->gtid);
                 CDABHeader cdh;
                 cdh.record_type = DETECTOR_EVENT;
                 cdh.size = sizeof(Event);

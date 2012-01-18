@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <pthread.h>
-//#include <jemalloc/jemalloc.h>
+#include <jemalloc/jemalloc.h>
 #include "listener.h"
 #include "shipper.h"
 #include "ds.h"
