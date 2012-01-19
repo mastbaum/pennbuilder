@@ -4,17 +4,20 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <unistd.h>
 #include <pthread.h>
 #include <signal.h>
 #include <time.h>
 #include <jemalloc/jemalloc.h>
-#include "listener.h"
-#include "ds.h"
+#include <listener.h>
+#include <ds.h>
 
 extern Buffer* event_buffer;
 extern Buffer* event_header_buffer;
 extern Buffer* run_header_buffer;
 extern FILE* outfile;
+
+int sockfd, thread_sockfd[NUM_THREADS];
 
 void close_sockets()
 {
@@ -58,7 +61,7 @@ void die(const char *msg)
 
 void accept_xl3packet(void* packet_buffer)
 {
-    XL3Packet* p = realloc(packet_buffer, sizeof(XL3Packet));
+    XL3Packet* p = (XL3Packet*) realloc(packet_buffer, sizeof(XL3Packet));
     // fixme: check packet type to ensure megabundle
     int nbundles = p->cmdHeader.num_bundles;
     int ibundle;
@@ -73,10 +76,10 @@ void accept_xl3packet(void* packet_buffer)
 
         Event* e;
         RecordType r;
-        buffer_at(event_buffer, gtid, &r, (void*)&e);
+        buffer_at(event_buffer, gtid, &r, (void**)&e);
         pthread_mutex_lock(&(event_buffer->mutex_buffer[keyid]));
         if(!e) {
-            e = malloc(sizeof(Event));
+            e = (Event*) malloc(sizeof(Event));
             e->gtid = gtid;
             clock_t t = clock();
             e->builder_arrival_time = t;
@@ -115,7 +118,7 @@ void* listener_child(void* psock)
             return NULL;
         }
         else {
-            PacketType packet_type = ((PacketHeader*) packet_buffer)->type;
+            PacketType packet_type = (PacketType) ((PacketHeader*) packet_buffer)->type;
             if(packet_type == XL3_PACKET)
                 accept_xl3packet(packet_buffer);
             else if(packet_type == MTC_PACKET)
@@ -143,12 +146,6 @@ void* listener_child(void* psock)
 
 void* listener(void* ptr)
 {
-    memset(&read_pos, 0, NCRATES * sizeof(uint16_t));
-    memset(&seq_pos, 0, NCRATES * NFECS * sizeof(uint32_t));
-    memset(&crate_gtid_current, 0, NCRATES * sizeof(uint32_t));
-    memset(&crate_gtid_last, 0, NCRATES * sizeof(uint32_t));
-    memset(&crate_skipped, 0, NCRATES * sizeof(uint16_t));
-
     int portno;
     socklen_t clilen;
     struct sockaddr_in serv_addr, cli_addr;

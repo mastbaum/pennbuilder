@@ -1,3 +1,6 @@
+#ifndef __PENNBUILDER_DS__
+#define __PENNBUILDER_DS__
+
 #include <pthread.h>
 #include <stdint.h>
 #include <time.h>
@@ -10,6 +13,8 @@
 #define NPMTS 19 * 16 * 32
 #define MAX_ROPES 10
 
+uint32_t get_bits(uint32_t x, uint32_t position, uint32_t count);
+
 /// PMTBundle contains raw PMT data packed into 3 32-bit words (96 bits)
 typedef struct
 {
@@ -20,8 +25,8 @@ typedef struct
 void pmtbundle_print(PMTBundle* p);
 
 // extract ids from packed pmt bundle
-inline uint32_t pmtbundle_pmtid(PMTBundle* p);
-inline uint32_t pmtbundle_gtid(PMTBundle* p);
+uint32_t pmtbundle_pmtid(PMTBundle* p);
+uint32_t pmtbundle_gtid(PMTBundle* p);
 
 /// MTCData contains trigger information. Format unknown AToW. (192 bits)
 typedef struct
@@ -175,7 +180,7 @@ void buffer_status(Buffer* b);
 void buffer_clear(Buffer* b);
 
 // returns the array index corresponding to gtid id
-inline uint64_t buffer_keyid(Buffer* b, unsigned int id);
+uint64_t buffer_keyid(Buffer* b, unsigned int id);
 
 // get an element out of the buffer at gtid id
 int buffer_at(Buffer* b, unsigned int id, RecordType* type, void** pk);
@@ -187,4 +192,6 @@ int buffer_isfull(Buffer* b);
 int buffer_isempty(Buffer* b);
 int buffer_push(Buffer* b, RecordType type, void* key);
 int buffer_pop(Buffer* b, RecordType* type, void** pk);
+
+#endif
 

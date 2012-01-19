@@ -6,7 +6,7 @@
 #include <jemalloc/jemalloc.h>
 #include "ds.h"
 
-inline uint32_t get_bits(uint32_t x, uint32_t position, uint32_t count)
+uint32_t get_bits(uint32_t x, uint32_t position, uint32_t count)
 {
   uint32_t shifted = x >> position;
   uint32_t mask = ((uint64_t)1 << count) - 1;
@@ -23,15 +23,7 @@ void pmtbundle_print(PMTBundle* p)
         printf("  word%i =  %u:\n", i, p->word[i]);
 }
 
-inline uint32_t pmtbundle_pmtid(PMTBundle* p)
-{
-    int ichan = get_bits(p->word[0], 16, 5);
-    int icard = get_bits(p->word[0], 26, 4);
-    int icrate = get_bits(p->word[0], 21, 5);
-    return (512*icrate + 32*icard + ichan);
-}
-
-inline uint32_t pmtbundle_gtid(PMTBundle* p)
+uint32_t pmtbundle_gtid(PMTBundle* p)
 {
     uint32_t gtid1 = get_bits(p->word[0], 0, 16);
     uint32_t gtid2 = get_bits(p->word[2], 12, 4);
@@ -39,12 +31,21 @@ inline uint32_t pmtbundle_gtid(PMTBundle* p)
     return (gtid1 + (gtid2<<16) + (gtid3<<20));
 }
 
+uint32_t pmtbundle_pmtid(PMTBundle* p)
+{
+    int ichan = get_bits(p->word[0], 16, 5);
+    int icard = get_bits(p->word[0], 26, 4);
+    int icrate = get_bits(p->word[0], 21, 5);
+    return (512*icrate + 32*icard + ichan);
+}
+
+
 Buffer* buffer_alloc(Buffer** pb, int size)
 {
-    *pb = malloc(sizeof(Buffer));
-    (*pb)->keys = malloc(size * sizeof(void*));
-    (*pb)->type = malloc(size * sizeof(RecordType));
-    (*pb)->mutex_buffer = malloc(size* sizeof(pthread_mutex_t));
+    *pb = (Buffer*) malloc(sizeof(Buffer));
+    (*pb)->keys = (void**) malloc(size * sizeof(void*));
+    (*pb)->type = (RecordType*) malloc(size * sizeof(RecordType));
+    (*pb)->mutex_buffer = (pthread_mutex_t*) malloc(size* sizeof(pthread_mutex_t));
     int mem_allocated = sizeof(Buffer) + size * (sizeof(void*) + sizeof(RecordType) + sizeof(pthread_mutex_t));
     if(*pb) {
         printf("Initializing buffer: keys[%d] (%d KB allocated)\n", size, mem_allocated/1000);
@@ -104,7 +105,7 @@ int buffer_pop(Buffer* b, RecordType* type, void** pk)
         (*pk) = b->keys[b->read];
         (*type) = b->type[b->read];
         b->keys[b->read] = NULL;
-        b->type[b->read] = 0;
+        b->type[b->read] = (RecordType) 0;
         b->read++; // note: you can pop a NULL pointer off the end
         b->read %= b->size;
     }
@@ -122,6 +123,11 @@ void buffer_status(Buffer* b)
                                                              buffer_isempty(b));
 }
 
+uint64_t buffer_keyid(Buffer* b, unsigned int id)
+{
+    return (id - b->offset) % b->size;
+}
+
 void buffer_clear(Buffer* b)
 {
     pthread_mutex_lock(&(b->mutex_write));
@@ -134,7 +140,7 @@ void buffer_clear(Buffer* b)
         if(b->keys[i] != NULL)
             free(b->keys[i]);
         b->keys[i] = NULL;
-        b->type[i] = 0;
+        b->type[i] = (RecordType) 0;
     }
     b->write = 0;
     b->read = 0;
@@ -143,11 +149,6 @@ void buffer_clear(Buffer* b)
     pthread_mutex_unlock(&(b->mutex_read));
     for(i=0; i<b->size; i++)
         pthread_mutex_unlock(&(b->mutex_buffer[i]));
-}
-
-inline uint64_t buffer_keyid(Buffer* b, unsigned int id)
-{
-    return (id - b->offset) % b->size;
 }
 
 int buffer_at(Buffer* b, unsigned int id, RecordType* type, void** pk)

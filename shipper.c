@@ -39,7 +39,7 @@ void* shipper(void* ptr)
         if(!etemp) {
             if((float)(time_now - time_last_shipped) / CLOCKS_PER_SEC > 0.5) {
                 RecordType rtemp;
-                buffer_pop(event_buffer, &rtemp, (void*)&etemp);
+                buffer_pop(event_buffer, &rtemp, (void**)&etemp);
 		time_last_shipped = clock();
                 printf("Skipped gtid after timeout\n");
             }
@@ -166,7 +166,7 @@ void* shipper(void* ptr)
         // finally, ship the event data
         Event* e;
         RecordType r;
-        if (buffer_pop(event_buffer, &r, (void*)&e) == 1) {
+        if (buffer_pop(event_buffer, &r, (void**)&e) == 1) {
             if (!e) {
                 printf("popped null pointer\n"); 
             }
