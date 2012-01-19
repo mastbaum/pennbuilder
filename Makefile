@@ -8,7 +8,7 @@ CFLAGS = -I$(INCDIR)
 CXXFLAGS = -g 
 LFLAGS = -L/usr/local/lib
 
-CC = gcc -g
+CC = g++ -g
 
 LIBS = -ljemalloc -pthread -lrt
 

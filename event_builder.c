@@ -40,7 +40,7 @@ int main(int argc, char *argv[])
     buffer_alloc(&run_header_buffer, RUN_HEADER_BUFFER_SIZE);
 
     // fake RHDR for testing
-    RHDR* rh = malloc(sizeof(RHDR));
+    RHDR* rh = (RHDR*) malloc(sizeof(RHDR));
     rh->run_id = 123456;
     rh->first_event_id = 0;
     buffer_push(run_header_buffer, RUN_HEADER, rh);
