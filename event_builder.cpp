@@ -10,9 +10,9 @@
 #include "shipper.h"
 #include "ds.h"
 
-/** Event Builder for SNO+, C edition
+/** Event Builder for SNO+, C++ edition
  *
- *  Enqueues incoming raw data in ring buffers, and writes out to disk and/or
+ *  Enqueues incoming raw data in ring buffers, and writes out to disk and
  *  a socket as events are finished.
  *
  *  Andy Mastbaum (mastbaum@hep.upenn.edu), June 2011
