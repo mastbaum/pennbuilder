@@ -1,29 +1,16 @@
-EVB_OBJS = ds.o listener.o shipper.o event_builder.o
-EVB_SRCS = $(EVB_OBJS:.o=.cpp)
-CLI_OBJS = client.o ds.o
-CLI_SRCS = $(CLI_OBJS:.o=.cpp)
-
-INCDIR = include
-INCLUDE = -I$(INCDIR) -I$(ROOTSYS)/include -I$(AVALANCHE)
-CFLAGS =
+INCLUDE = -I./include -I$(ROOTSYS)/include -I$(AVALANCHE)
 LFLAGS = -L/usr/local/lib -L$(ROOTSYS)/lib -L$(AVALANCHE)
 LIBS = -ljemalloc -pthread -lrt -lavalanche -lCore -lCint
-
 CC = g++ -g
 
-CXXFLAGS = $(CFLAGS) $(LFLAGS) $(INCLUDE) $(LIBS) -g
+all: root_dict event_builder
 
-all: event_builder client
+root_dict:
+	$(ROOTSYS)/bin/rootcint -f PackedEvent_dict.cc -c -p -I. -I$(ROOTSYS)/include -D_REENTRANT ./include/PackedEvent.hh ./include/LinkDef.hh
 
 event_builder: $(EVB_OBJS)
-	-root -b -l -q $(INCDIR)/PackedEvent.hh+g && rm
-	-$(RM) $(INCDIR)/PackedEvent_hh.d
-	-mv $(INCDIR)/PackedEvent_hh.so .
-	$(CC) -o $@ PackedEvent_hh.so $(EVB_OBJS) $(CXXFLAGS)
-
-client: $(CLI_OBJS)
-	$(CC) -o $@ $(CLI_OBJS) $(CXXFLAGS)
+	$(CC) -o $@ PackedEvent_dict.cc ds.cpp listener.cpp shipper.cpp event_builder.cpp $(INCLUDE) $(LFLAGS) $(LIBS) $(CXXFLAGS) $(CFLAGS)
 
 clean: 
-	-$(RM) core *.o
+	-$(RM) core PackedEvent_dict.* *.o event_builder
 

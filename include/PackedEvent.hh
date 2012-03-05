@@ -28,7 +28,6 @@
 
 #include <vector>
 #include <string>
-#include <time.h>
 #include <TObject.h>
 
 namespace RAT {
@@ -40,7 +39,17 @@ class GenericRec : public TObject   {
   public:
     
   // ROOT junk
-  ClassDef(GenericRec,1)
+  ClassDef(GenericRec,2)
+};
+
+enum ERecordType {
+    kRecEmpty,
+    kRecPMT,
+    kRecRHDR,
+    kRecCAAC,
+    kRecCAST,
+    kRecTRIG,
+    kRecEPED
 };
 
 // Top level class, holding record type, and the record itself
@@ -50,7 +59,6 @@ class PackedRec : public TObject {
     //PackedRec(const PackedRec &rhs) : TObject() { Init(); CopyObj(rhs); };
     virtual ~PackedRec() {};
     //virtual PackedRec &operator=(const PackedRec &rhs) { CopyObj(rhs); return *this; };
-    
     // Record types:
     // 0 = empty
     // 1 = detector event
@@ -63,7 +71,7 @@ class PackedRec : public TObject {
     GenericRec *Rec;
 
   // ROOT junk
-  ClassDef(PackedRec,1)
+  ClassDef(PackedRec,2)
 
   protected:
   
@@ -81,19 +89,87 @@ class PackedRec : public TObject {
 
 // PMT bundle, 3 words per pmt hit
 class PMTBundle { 
-public:
-  UInt_t Word[3]; 
+  public:
+	PMTBundle(): Word(3) {}
+	PMTBundle(const std::vector<UInt_t> &aBundle): Word(aBundle) {}
+	virtual ~PMTBundle() {}
+	virtual PMTBundle &operator=(const PMTBundle &rhs) { CopyObj(rhs); return *this; }
 
-  // ROOT junk
-  ClassDef(PMTBundle,1)
+	std::vector<UInt_t> Word; 
+
+  protected:
+	virtual void CopyObj(const PMTBundle &rhs) {
+		Word = rhs.Word;
+	}
+
+	ClassDef(PMTBundle,2)
+};
+
+
+// CAEN
+#define kNCaenChan	8
+class CaenTrace {
+  public:
+	CaenTrace(): Waveform(0) {}
+	virtual ~CaenTrace() {}
+	virtual CaenTrace &operator=(const CaenTrace &rhs) { CopyObj(rhs); return *this; }
+
+	std::vector<UShort_t> Waveform;
+
+  protected:
+	virtual void CopyObj(const CaenTrace &rhs) {
+		Waveform = rhs.Waveform;
+	}
+
+	ClassDef(CaenTrace, 2)
+};
+
+class CaenBundle { 
+  public:
+	CaenBundle(): ChannelMask(0), Pattern(0), EventCount(0), Clock(0), Trace(8) {}
+	virtual ~CaenBundle() {}
+	virtual CaenBundle &operator=(const CaenBundle &rhs) { CopyObj(rhs); return *this; }
+
+	UInt_t ChannelMask;
+	UInt_t Pattern;
+	UInt_t EventCount;
+	UInt_t Clock;
+	std::vector<CaenTrace> Trace;
+ 
+  protected:
+	virtual void CopyObj(const CaenBundle &rhs) {
+		ChannelMask = rhs.ChannelMask;
+		Pattern = rhs.Pattern;
+		EventCount = rhs.EventCount;
+		Clock = rhs.Clock;
+		Trace = rhs.Trace;
+	}
+
+	ClassDef(CaenBundle,2)
 };
 
 const int kNheaders = 6;
 
 // Detector event class, inheriting from the generic record base class
 class PackedEvent : public GenericRec {
+protected:
+  virtual void Init() {
+    for(int i=0;i<kNheaders;++i){
+      MTCInfo[i] = 0;
+    }
+    RunID = 0;
+    SubRunID = 0;
+    NHits = 0;
+    EVOrder = 0;
+    RunMask = 0;
+    PackVer = 0;
+    MCFlag = 0;
+    DataType = 0;
+    ClockStat10 = 0;
+  }
+
 public:
-  PackedEvent() : GenericRec() { Init(); };
+  PackedEvent() : GenericRec(), PMTBundles(), Caen() { Init(); };
   PackedEvent(const PackedEvent &rhs) : GenericRec() { Init(); CopyObj(rhs); };
   virtual ~PackedEvent() {};
   virtual PackedEvent &operator=(const PackedEvent &rhs) { CopyObj(rhs); return *this; };
@@ -111,32 +187,13 @@ public:
   char MCFlag;
   char DataType;
   char ClockStat10;
-  UInt_t gtid;
-  clock_t builder_arrival_time;
     
   // Vector of PMT bundles
   std::vector<PMTBundle> PMTBundles;
-
-  // ROOT junk
-  ClassDef(PackedEvent,2)
+  CaenBundle Caen;
 
 protected:
   
-  virtual void Init() {
-    for(int i=0;i<kNheaders;++i){
-      MTCInfo[i] = 0;
-    }
-    RunID = 0;
-    SubRunID = 0;
-    NHits = 0;
-    EVOrder = 0;
-    RunMask = 0;
-    PackVer = 0;
-    MCFlag = 0;
-    DataType = 0;
-    ClockStat10 = 0;
-    PMTBundles.resize(0);
-  }
   
   virtual void CopyObj(const PackedEvent &rhs) {
     for(int i=0;i<kNheaders;++i){
@@ -152,7 +209,11 @@ protected:
     DataType = rhs.DataType;
     ClockStat10 = rhs.ClockStat10;
     PMTBundles = rhs.PMTBundles;
+    Caen = rhs.Caen;
   }
+
+  // ROOT junk
+  ClassDef(PackedEvent,2)
 
 };
 
@@ -176,9 +237,6 @@ public:
   UInt_t CalType;
   UInt_t EventID;  // GTID of first events in this bank's validity
   UInt_t RunID;    // Double-check on the run
-
-  // ROOT junk
-  ClassDef(EPED,1)
 
 protected:
   
@@ -204,6 +262,8 @@ protected:
     RunID = rhs.RunID;
   }
 
+  // ROOT junk
+  ClassDef(EPED,2)
 };
 
 class TRIG : public GenericRec {
@@ -225,9 +285,6 @@ public:
   UInt_t PrescaleFreq;
   UInt_t EventID;  // GTID of first events in this bank's validity
   UInt_t RunID;    // Double-check on the run
-
-  // ROOT junk
-  ClassDef(TRIG,1)
 
 protected:
   
@@ -259,6 +316,8 @@ protected:
     RunID = rhs.RunID;
   }
 
+  // ROOT junk
+  ClassDef(TRIG,2)
 };
 
 
@@ -281,9 +340,6 @@ public:
   UInt_t ValidEventID;
   UInt_t RunID;    // Double-check on the run
   
-
-  // ROOT junk
-  ClassDef(RHDR,1)
 
 protected:
   
@@ -313,6 +369,9 @@ protected:
     RunID = rhs.RunID;    // Double-check on the run
   }
 
+  // ROOT junk
+  ClassDef(RHDR,2)
+
 };
 
 class CAST : public GenericRec {
@@ -337,9 +396,6 @@ public:
   std::vector<float> RopeVel;
   std::vector<float> RopeTens;
   std::vector<float> RopeErr;
-
-  // ROOT junk
-  ClassDef(CAST,1)
 
 protected:
   
@@ -381,6 +437,9 @@ protected:
     RopeErr = rhs.RopeErr;
   }
 
+  // ROOT junk
+  ClassDef(CAST,2)
+
 };
 
 class CAAC : public GenericRec {
@@ -394,9 +453,6 @@ public:
   float AVPos[3];
   float AVRoll[3];  // roll, pitch and yaw
   float AVRopeLength[7];
-
-  // ROOT junk
-  ClassDef(CAAC,1)
 
 protected:
   
@@ -420,28 +476,12 @@ protected:
     }
   }
 
+
+  // ROOT junk
+  ClassDef(CAAC,2)
 };
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   } // namespace DS
 } // namespace RAT
 
 #endif
+

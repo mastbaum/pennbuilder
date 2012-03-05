@@ -5,10 +5,7 @@
 #include <stdint.h>
 #include <time.h>
 
-/** Data structure structs 
- *
- *  Largely copied from RAT::DS:PackedEvent
- */
+#include "PackedEvent.hh"
 
 #define NPMTS 19 * 16 * 32
 #define MAX_ROPES 10
@@ -16,24 +13,20 @@
 uint32_t get_bits(uint32_t x, uint32_t position, uint32_t count);
 
 /// PMTBundle contains raw PMT data packed into 3 32-bit words (96 bits)
-typedef struct
-{
+typedef struct {
     uint32_t word[3];
-} PMTBundle;
+} XL3PMTBundle;
 
-// print some pmt bundle info (address, gtid, pmtid) for debugging
-void pmtbundle_print(PMTBundle* p);
+void pmtbundle_print(XL3PMTBundle* p);
+uint32_t pmtbundle_gtid(XL3PMTBundle* p);
+uint32_t pmtbundle_pmtid(XL3PMTBundle* p);
 
-// extract ids from packed pmt bundle
-uint32_t pmtbundle_pmtid(PMTBundle* p);
-uint32_t pmtbundle_gtid(PMTBundle* p);
-
-/// CAENData contains digitized trigger sums for up to 8 channels (12.8k bits)
-typedef struct
-{
-    uint32_t header[4];
-    uint32_t data[8][55]; // v1720 packs data like so (2.5 samples/word)
-} CAENData;
+/// Event plus metadata
+typedef struct {
+    uint32_t gtid;
+    clock_t arrival_time;
+    RAT::DS::PackedEvent* event;
+} EventRecord;
 
 /** Ring FIFO buffer
  *
