@@ -19,6 +19,7 @@ extern Buffer* event_buffer;
 extern Buffer* event_header_buffer;
 extern Buffer* run_header_buffer;
 
+extern pthread_mutex_t writer_mutex;
 extern TFile* outfile;
 extern TTree* tree;
 extern RAT::DS::PackedRec* rec;
@@ -52,10 +53,14 @@ void handler(int signal) {
         printf("Closing sockets...\n");
         close_sockets();
 
-        printf("Closing run file...\n");
-        outfile->cd();
-        tree->Write();
-        outfile->Close();
+        if (outfile && tree) {
+            printf("Closing run file...\n");
+            pthread_mutex_lock(&writer_mutex);
+            outfile->cd();
+            tree->Write();
+            outfile->Close();
+            pthread_mutex_unlock(&writer_mutex);
+        }
 
         exit(0);
     }
@@ -174,8 +179,9 @@ void* listener(void* ptr) {
     listen(sockfd, 5);
 
     clilen = sizeof(cli_addr);
-    signal(SIGINT, &handler);
     pthread_t threads[NUM_THREADS];
+
+    signal(SIGINT, &handler);
     int thread_index = 0;
     while(1) {
         int newsockfd = accept(sockfd, (struct sockaddr*) &cli_addr, &clilen);

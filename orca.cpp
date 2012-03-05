@@ -1,7 +1,10 @@
-#include<iostream>
+#include <iostream>
 
-#include<ORRunContext.hh>
-#include< "orca.h"
+#include <ORRunContext.hh>
+#include "orca.h"
+#include "ds.h"
+
+void handler(int signal);
 
 extern Buffer* event_buffer;
 extern Buffer* event_header_buffer;
@@ -28,6 +31,11 @@ ORBuilderProcessor::ORBuilderProcessor(std::string /*label*/) {
     pCaenCount = 0;
     pPMTCount = 0;
     fEventOrder = 0;
+
+    fMTCDataId = fMTCProcessor->GetDataId();
+    fPMTDataId = fPMTProcessor->GetDataId();
+    fCaenDataId = fCaenProcessor->GetDataId();
+    fRunDataId = fRunProcessor->GetDataId();
 }
 
 ORBuilderProcessor::~ORBuilderProcessor() {
@@ -40,11 +48,6 @@ ORBuilderProcessor::~ORBuilderProcessor() {
 ORDataProcessor::EReturnCode ORBuilderProcessor::StartRun() {
     std::cout << "run start: " << (int)GetRunContext()->GetRunNumber() << std::endl;
 
-    fMTCDataId = fMTCProcessor->GetDataId();
-    fPMTDataId = fPMTProcessor->GetDataId();
-    fCaenDataId = fCaenProcessor->GetDataId();
-    fRunId = fRunProcessor->GetDataId();
-
     fCaenOffset = 0;
     fCaenLastGTId = 0;
     pMTCCount = 0;
@@ -53,7 +56,6 @@ ORDataProcessor::EReturnCode ORBuilderProcessor::StartRun() {
     fEventOrder = 0;
 
     // run header
-    rec->RecordType = kRecRHDR;
     RAT::DS::RHDR* rhdr = new RAT::DS::RHDR();
     rhdr->Date = 0;
     rhdr->Time = 0;
@@ -65,7 +67,7 @@ ORDataProcessor::EReturnCode ORBuilderProcessor::StartRun() {
     rhdr->FirstEventID = 0;
     rhdr->ValidEventID = 0;
     rhdr->RunID = GetRunContext()->GetRunNumber();
-    buffer_push(run_header_buffer, RUN_HEADER, rh);
+    buffer_push(run_header_buffer, RUN_HEADER, rhdr);
 
     return kSuccess;
 }
@@ -123,7 +125,7 @@ ORDataProcessor::EReturnCode ORBuilderProcessor::ProcessDataRecord(UInt_t* recor
         er->event = e;
 
         if (er && er->gtid != gtid) {
-            printf("Buffer overflow! Ignoring GTID %t\n", gtid);
+            printf("Buffer overflow! Ignoring GTID %i\n", gtid);
         }
 
         pthread_mutex_unlock(&(event_buffer->mutex_buffer[keyid]));
@@ -153,9 +155,9 @@ ORDataProcessor::EReturnCode ORBuilderProcessor::ProcessDataRecord(UInt_t* recor
             }
 
             RAT::DS::PMTBundle rpmtb;
-            pmtb.Word[0] = fPMTDecoder.Wrd0(record);
-            pmtb.Word[1] = fPMTDecoder.Wrd1(record);
-            pmtb.Word[2] = fPMTDecoder.Wrd2(record);
+            rpmtb.Word[0] = fPMTDecoder.Wrd0(record);
+            rpmtb.Word[1] = fPMTDecoder.Wrd1(record);
+            rpmtb.Word[2] = fPMTDecoder.Wrd2(record);
             er->event->PMTBundles.push_back(rpmtb);
             er->event->NHits++;
 
@@ -171,9 +173,9 @@ ORDataProcessor::EReturnCode ORBuilderProcessor::ProcessDataRecord(UInt_t* recor
 
         // "corrected" caen gtid
         uint32_t gtid = fCaenDecoder.EventCount(record);
-        gtid += thisGTId >> 16;
+        gtid += gtid >> 16;
         if (gtid & 0x0000ffff)
-            thisGTId++;
+            gtid++;
         gtid += fCaenOffset;
         gtid &= 0x00ffffff;
 
@@ -209,7 +211,7 @@ ORDataProcessor::EReturnCode ORBuilderProcessor::ProcessDataRecord(UInt_t* recor
                 RAT::DS::CaenTrace rcaentrace;
                 for (int i=0; i<numSamples; i++)
                     rcaentrace.Waveform.push_back(trace[i]);
-                rcaen.push_back(rcaentrace);
+                rcaen.Trace.push_back(rcaentrace);
             }
         }
 
@@ -219,7 +221,7 @@ ORDataProcessor::EReturnCode ORBuilderProcessor::ProcessDataRecord(UInt_t* recor
 
         pCaenCount++;
     }
-    else if (thisDataId == fRunId) {
+    else if (thisDataId == fRunDataId) {
         ORDataProcessor::EReturnCode code = ORCompoundDataProcessor::ProcessDataRecord(record);
         if (code != kSuccess)
             return code;
@@ -237,14 +239,160 @@ ORDataProcessor::EReturnCode ORBuilderProcessor::ProcessDataRecord(UInt_t* recor
         else {
             std::cout << "run end obtained" << std::endl;
             if (record[1] & 0x2)
-                cout << "soft end" << endl;
+                std::cout << "soft end" << std::endl;
             if (record[1] & 0x4)
-                cout << "remote control" << endl;
+                std::cout << "remote control" << std::endl;
         }
     }
     else {
         std::cout << "unhandled record: id: " << std::hex << (int)thisDataId << std::dec << std::endl;
     }
     return kSuccess;
+}
+
+#include <stdlib.h>
+#include <fstream>
+#include <sstream>
+#include <sys/wait.h>
+#include <sys/time.h>
+#include <sys/resource.h> 
+#include <set> 
+
+#include "ORDataProcManager.hh"
+#include "ORLogger.hh"
+#include "ORSocketReader.hh"
+#include "OROrcaRequestProcessor.hh"
+#include "ORServer.hh"
+#include "ORHandlerThread.hh"
+
+void* orca_listener(void* arg) {
+    OrcaURL* ohi = (OrcaURL*) arg;
+    std::string orcahost = ohi->host;
+    int orcaport = ohi->port;
+
+    std::string label = "OR";
+    ORVReader* reader = NULL;
+
+    bool keepAliveSocket = false;
+    bool runAsDaemon = false;
+    unsigned long timeToSleep = 10; //default sleep time for sockets.
+    unsigned int reconnectAttempts = 0; // default reconnect tries for sockets.
+    unsigned int portToListenOn = 0;
+    unsigned int maxConnections = 5; // default connections accepted by server
+
+    ORHandlerThread* handlerThread = new ORHandlerThread();
+    handlerThread->StartThread();
+
+    /***************************************************************************/
+    /*   Running orcaroot as a daemon server. */
+    /***************************************************************************/
+    if (runAsDaemon) {
+        /* Here we start listening on a socket for connections. */
+        /* We are doing this very simply with a simple fork. Eventually want
+           to check number of spawned processes, etc.  */
+        ORLog(kRoutine) << "Running orcaroot as daemon on port: " << portToListenOn << std::endl;
+        pid_t childpid = 0;
+        std::set<pid_t> childPIDRecord;
+
+        ORServer* server = new ORServer(portToListenOn);
+        /* Starting server, binding to a port. */
+        if (!server->IsValid()) {
+            ORLog(kError) << "Error listening on port " << portToListenOn 
+                << std::endl << "Error code: " << server->GetErrorCode()
+                << std::endl;
+            return NULL;
+        }
+
+        signal(SIGINT, &handler);
+        while (1) {
+            /* This while loop is broken by a kill signal which is well handled
+             * by the server.  The kill signal will automatically propagate to the
+             * children so we really don't have to worry about waiting for them to
+             * die.  */
+            while (childPIDRecord.size() >= maxConnections) { 
+                /* We've reached our maximum number of child processes. */
+                /* Wait for a process to end. */
+                childpid = wait3(0, WUNTRACED, 0);
+                if(childPIDRecord.erase(childpid) != 1) {
+                    /* Something really weird happened. */
+                    ORLog(kError) << "Ended child process " << childpid 
+                        << " not recognized!" << std::endl;
+                }
+            }
+            while((childpid = wait3(0,WNOHANG,0)) > 0) {
+                /* Cleaning up any children that may have ended.                   * 
+                 * This will just go straight through if no children have stopped. */
+                if(childPIDRecord.erase(childpid) != 1) {
+                    /* Something really weird happened. */
+                    ORLog(kError) << "Ended child process " << childpid 
+                        << " not recognized!" << std::endl;
+                }
+            } 
+            ORLog(kRoutine) << childPIDRecord.size()  << " connections running..." << std::endl;
+            ORLog(kRoutine) << "Waiting for connection..." << std::endl;
+            TSocket* sock = server->Accept(); 
+            if (sock == (TSocket*) 0 || sock == (TSocket*) -1 ) {
+                // There was an error, or the socket got closed .
+                if (!server->IsValid()) return 0;
+                continue;
+            }
+            if(!sock->IsValid()) {
+                /* Invalid socket, cycle to wait. */
+                delete sock;
+                continue;
+            }
+            if ((childpid = fork()) == 0) {
+                /* We are in the child process.  Set up reader and fire away. */
+                delete server;
+                delete handlerThread;
+                handlerThread = new ORHandlerThread;
+                handlerThread->StartThread();
+                reader = new ORSocketReader(sock, true);
+                /* Get out of the while loop */
+                break;
+            } 
+            /* Parent process: wait for next connection. Close our descriptor. */
+            ORLog(kRoutine) << "Connection accepted, child process begun with pid: " 
+                << childpid << std::endl;
+            childPIDRecord.insert(childpid);
+            delete sock; 
+        }
+
+        /***************************************************************************/
+        /*  End daemon server code.  */
+        /***************************************************************************/
+    } else {
+        /* Normal running, either connecting to a server or reading in a file. */
+        reader = new ORSocketReader(orcahost.c_str(), orcaport);
+    }
+    if (!reader->OKToRead()) {
+        ORLog(kError) << "Reader couldn't read" << std::endl;
+        return NULL;
+    }
+
+    ORLog(kRoutine) << "Setting up data processing manager..." << std::endl;
+    ORDataProcManager dataProcManager(reader);
+
+    /* Declare processors here. */
+    OROrcaRequestProcessor orcaReq;
+    ORBuilderProcessor builderProcessor(label);
+
+    if (runAsDaemon) {
+        /* Add them here if you wish to run them in daemon mode ( not likely ).*/
+        dataProcManager.SetRunAsDaemon();
+        dataProcManager.AddProcessor(&orcaReq);
+    } else {
+        /* Add the processors here to run them in normal mode. */
+        dataProcManager.AddProcessor(&builderProcessor);
+    }
+
+    ORLog(kRoutine) << "Start processing..." << std::endl;
+    dataProcManager.ProcessDataStream();
+    ORLog(kRoutine) << "Finished processing..." << std::endl;
+
+    delete reader;
+    delete handlerThread;
+
+    return NULL;
 }
 

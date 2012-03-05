@@ -23,12 +23,14 @@ extern Buffer* run_header_buffer;
 
 void handler(int signal);
 
-TFile* outfile;
-TTree* tree;
-RAT::DS::PackedRec* rec;
+pthread_mutex_t writer_mutex;
+TFile* outfile = NULL;
+TTree* tree = NULL;
+RAT::DS::PackedRec* rec = NULL;
 
 void* shipper(void* ptr)
 {
+    pthread_mutex_init(&writer_mutex, NULL);
     clock_t time_now;
     clock_t time_last_shipped;
     time_last_shipped = clock();

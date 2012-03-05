@@ -1,6 +1,7 @@
 #ifndef __PENNBUILDER_DS__
 #define __PENNBUILDER_DS__
 
+#include <string>
 #include <pthread.h>
 #include <stdint.h>
 #include <time.h>
@@ -9,6 +10,11 @@
 
 #define NPMTS 19 * 16 * 32
 #define MAX_ROPES 10
+
+struct OrcaURL {
+    std::string host;
+    int port;
+};
 
 uint32_t get_bits(uint32_t x, uint32_t position, uint32_t count);
 
