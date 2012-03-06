@@ -31,8 +31,8 @@ Buffer* run_header_buffer;
 int main(int argc, char *argv[])
 {
     int port;
-    std::string orcahost = "localhost";
-    int orcaport = 1234;
+    std::string orcahost = "snoplusdaq1.snolab.ca";
+    int orcaport = 44666;
 
     if(argc != 2) {
         printf("Usage: %s <port>\n", argv[0]);

@@ -290,16 +290,16 @@ void* orca_listener(void* arg) {
         /* Here we start listening on a socket for connections. */
         /* We are doing this very simply with a simple fork. Eventually want
            to check number of spawned processes, etc.  */
-        ORLog(kRoutine) << "Running orcaroot as daemon on port: " << portToListenOn << std::endl;
+        std::cout << "Running orcaroot as daemon on port: " << portToListenOn << std::endl;
         pid_t childpid = 0;
         std::set<pid_t> childPIDRecord;
 
         ORServer* server = new ORServer(portToListenOn);
         /* Starting server, binding to a port. */
         if (!server->IsValid()) {
-            ORLog(kError) << "Error listening on port " << portToListenOn 
-                << std::endl << "Error code: " << server->GetErrorCode()
-                << std::endl;
+            std::cout << "Error listening on port " << portToListenOn 
+                      << std::endl << "Error code: " << server->GetErrorCode()
+                      << std::endl;
             return NULL;
         }
 
@@ -315,8 +315,8 @@ void* orca_listener(void* arg) {
                 childpid = wait3(0, WUNTRACED, 0);
                 if(childPIDRecord.erase(childpid) != 1) {
                     /* Something really weird happened. */
-                    ORLog(kError) << "Ended child process " << childpid 
-                        << " not recognized!" << std::endl;
+                    std::cout << "Ended child process " << childpid 
+                              << " not recognized!" << std::endl;
                 }
             }
             while((childpid = wait3(0,WNOHANG,0)) > 0) {
@@ -324,12 +324,12 @@ void* orca_listener(void* arg) {
                  * This will just go straight through if no children have stopped. */
                 if(childPIDRecord.erase(childpid) != 1) {
                     /* Something really weird happened. */
-                    ORLog(kError) << "Ended child process " << childpid 
-                        << " not recognized!" << std::endl;
+                    std::cout << "Ended child process " << childpid 
+                              << " not recognized!" << std::endl;
                 }
             } 
-            ORLog(kRoutine) << childPIDRecord.size()  << " connections running..." << std::endl;
-            ORLog(kRoutine) << "Waiting for connection..." << std::endl;
+            std::cout << childPIDRecord.size()  << " connections running..." << std::endl;
+            std::cout << "Waiting for connection..." << std::endl;
             TSocket* sock = server->Accept(); 
             if (sock == (TSocket*) 0 || sock == (TSocket*) -1 ) {
                 // There was an error, or the socket got closed .
@@ -352,8 +352,8 @@ void* orca_listener(void* arg) {
                 break;
             } 
             /* Parent process: wait for next connection. Close our descriptor. */
-            ORLog(kRoutine) << "Connection accepted, child process begun with pid: " 
-                << childpid << std::endl;
+            std::cout << "Connection accepted, child process begun with pid: " 
+                      << childpid << std::endl;
             childPIDRecord.insert(childpid);
             delete sock; 
         }
@@ -363,14 +363,14 @@ void* orca_listener(void* arg) {
         /***************************************************************************/
     } else {
         /* Normal running, either connecting to a server or reading in a file. */
-        reader = new ORSocketReader(orcahost.c_str(), orcaport);
+        reader = new ORSocketReader("snoplusdaq1.snolab.ca", 44666); //orcahost.c_str(), orcaport);
     }
     if (!reader->OKToRead()) {
         ORLog(kError) << "Reader couldn't read" << std::endl;
         return NULL;
     }
 
-    ORLog(kRoutine) << "Setting up data processing manager..." << std::endl;
+    std::cout << "Setting up data processing manager..." << std::endl;
     ORDataProcManager dataProcManager(reader);
 
     /* Declare processors here. */
@@ -383,12 +383,13 @@ void* orca_listener(void* arg) {
         dataProcManager.AddProcessor(&orcaReq);
     } else {
         /* Add the processors here to run them in normal mode. */
+        std::cout << "adding builderproc" << std::endl;
         dataProcManager.AddProcessor(&builderProcessor);
     }
 
-    ORLog(kRoutine) << "Start processing..." << std::endl;
+    std::cout << "Start processing..." << std::endl;
     dataProcManager.ProcessDataStream();
-    ORLog(kRoutine) << "Finished processing..." << std::endl;
+    std::cout << "Finished processing..." << std::endl;
 
     delete reader;
     delete handlerThread;

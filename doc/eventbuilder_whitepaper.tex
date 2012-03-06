@@ -11,7 +11,7 @@ In the SNO+ experiment, data from 9728 PMT channels spanning 19 electronics crat
 
 The new XL3s perform much of the role of the DAQ system in SNO: they push available data to a listening server over TCP/IP. This configuration makes it possible for an event builder to receive data directly from the crates; in a sense, the XL3s {\it are} the DAQ. Introducing an intermediate system to flow data through is unnecessary and presents a potential bottleneck and additional failure point.
 
-In light of this, a new event builder has been designed and written that will listen for incoming ``raw'' data over TCP/IP, buffer events until all associated data has arrived, and send complete events both to disk in a ``packed'' format and to a ``dispatcher'' which will send data to various monitoring stations. This paper provides a detailed technical description of this event builder.
+In light of this, a new event builder has been designed and written that will listen for incoming ``raw'' data over TCP/IP, buffer events until all associated data has arrived, and send complete events both to disk in a ``packed'' format and to a ``dispatcher'' which will send data to various monitoring stations. The builder also accepts data from the ORCA data acquisition system. This paper provides a detailed technical description of this event builder.
 
 \section{Data Structure}
 The event builder must handle several types of data:
@@ -41,7 +41,7 @@ For example, the detector event buffer is structured as follows:
 \end{description}
 Given the (stored) offset between global trigger ID (GTID) and buffer index, data arriving from an XL3 may be slotted into the proper place without any looping. For example, the $i$th packet representing PMT data associated with GTID 42 is stored in {\tt Buffer[42].PMTBundle[i]}. With this model, it is impossible to detect whether a second PMTBundle has arrived for this GTID/PMTID -- an occasional problem with front-end electronics -- without costly looping. Hence, that is left for the RAT input producer or data cleaning cuts to handle.
 
-The internal data structures {\tt PMTBundle}, {\tt MTCData}, and {\tt CAENData} are identical to those used by the front end (XL3), obviating any translation. The detector event, run-level header, and event-level header structure match the specification given in RAT's DS::PackedEvent.
+The internal data structures are identical to the detector event, run-level header, and event-level header structure defined in RAT's DS::PackedEvent.
 
 \subsection{Memory Management}
 The amount of of memory required to buffer a large number of SNO+ events is nontrivial, and much care must be taken to ensure that memory is managed in a thread-safe, fast, and space-efficient way. This event builder was optimized for fast throughput rather than memory efficiency, although tradeoffs remain possible.
@@ -54,33 +54,25 @@ The event builder must buffer relatively few run- and event-level headers, and s
 \end{description}
 An event with 9728 hits thus consumes at least 120 KB. Hence, a PC with a relatively modest 24 GB of memory could buffer just over 200000 `full-hit' events, or 3.5 minutes of triggering at 1 kHz.
 
-It is possible to improve this number by noting that events, on average, have approximately 1000 hit PMTs, not 10000. Given the 96 bit size of PMTBundles, it is more efficient for NHIT $<$ 3333 to store in the Event an array of 64-bit pointers to PMTBundles, and allocate on-demand. However, such an approach requires that the PMTBundle pointer array be flattened before writing to disk or a socket, a time-consuming task. Additionally, memory allocators must store some metadata to keep track of allocations, and hence typically have a fixed per-allocation overhead, disincentivizing many small allocations. The standard GNU glibc malloc commonly used in Linux programming, for example, has a 4 byte overhead on each alloation, meaning that replacing PMTBundles with pointers may actually double the data stored: a 64-bit pointer + 32 bit malloc overhead + the original 96 bit data = 192 bits consumed.
+However, average events have only 1000 hit PMTs, not 10000. The RAT packed data structures used internally are varible-sized, so the actual buffering capacity is substantially larger.
 
-This event builder allocates space for PMT Bundles only as necessary, and tracks the number received (NHIT). Only filled structures are written to disk, and output is additionally gzip-compressed on-the-fly with zlibc.
-
-A final memory-management concern is allocator performance in a thread-based environment. GNU glibc predates Linux pthreads, and performs quite poorly when multiple threads compete for memory access. Fortunately, alternative memory allocators exist with vastly superior performance in threaded applications as well as drastically lower per-allocation overhead. The event builder uses {\tt jemalloc}\footnote{\href{http://www.canonware.com/jemalloc/}{http://www.canonware.com/jemalloc/}}, the system allocator from FreeBSD which was recently optimized by engineers at FreeBSD and Facebook, in place of glibc. {\tt jemalloc} offers approximately 2\% overhead.
+GNU glibc predates Linux pthreads, and performs quite poorly when multiple threads compete for memory access. Fortunately, alternative memory allocators exist with vastly superior performance in threaded applications as well as drastically lower per-allocation overhead. The event builder uses {\tt jemalloc}\footnote{\href{http://www.canonware.com/jemalloc/}{http://www.canonware.com/jemalloc/}}, the system allocator from FreeBSD which was recently optimized by engineers at FreeBSD and Facebook, in place of glibc. {\tt jemalloc} offers approximately 2\% overhead.
 
 \section{Architecture}
 The work of the event builder is done by two functions: a ``listener'' and a ``shipper.'' The listener accepts connections from the XL3s, SBC, and TUBII, parses incoming data, and inserts it into the correct pigeonhole in the ring buffer. The shipper reads the oldest event in the event buffer, and sends it to disk and the dispatcher once the event is finished.
 
-The latter point here represents a significant improvement over the SNO event builder. The event builder keeps track of the position of each crate's XL3 readout loop and the position of each sequencer. By tracking when the XL3 and sequencer loops wrap around, the event builder can determine when an event has been fully built without relying on a fixed timout. This provides a gain in both speed (readout is usually much faster than the timeout) and robustness (fewer ``orhpan'' events).
+For compatibility, the event builder also accepts headers and event data from ORCA, a configuration more similar to SNO.
 
-A timeout is still provided as a failsafe for pathological events and rare corner cases not covered by the above (e.g. events with an entire crate unhit).
-
-Once an event is ready to be shipped, the shipper writes out any buffered run-level headers with a starting GTID less than of equal to that of the event, then any such event-level headers, then the event itself.
+Events are shipped out after a fixed timeout, through more complex logic is simple to implement if more information on the readout state can be determined from the front end electronics. Once an event is ready to be shipped, the shipper writes out any buffered run-level headers with a starting GTID less than of equal to that of the event, then any such event-level headers, then the event itself.
 
 Headers and events are serially written:
 \begin{itemize}
-\item To disk in a packed binary format (CDAB)
-\item Via a TCP/IP socket to a ``dispatcher'' process, likely on another machine
-\item Optionally, via a UNIX socket to a lightweight RAT process running the ``UnPackEvent'' processor, reading raw data from a socket and writing to disk in RAT format.
+\item To disk in the packed RAT ROOT format
+\item On the network via a ZeroMQ (avalanche\footnote{http://github.com/mastbaum/avalanche}) ROOT dispatcher
 \end{itemize}
 
-\subsection{CDAB Packed Binary Format}
-The packed binary format, CDAB, consists of C structures written directly to disk with gzip compression. This format is space efficient, fast, and most importantly, requires minimal CPU time. The C structures may be serialized for enhanced portability if it is deemed necessary. As implemented, CDAB is similar in spirit to SNO's ZDAB format, which were based on Fortran ZEBRA structures written to disk in binary form.
-
 \subsection{ROOT Output Format}
-By decision of SNO+ working groups, built events are to be written out in ROOT TTrees. ROOT files provide some advantages over plain C binary, including built-in MD5 checksumming and convenient analysis features such as interactive histogramming. As ROOT I/O requires C++, translation from the event builder's internal CDAB structure to ROOT occurs in a separate output processor. Inter-process communication between the builder and the ROOTifier is done through \href{http://www.zeromq.org/}{ZeroMQ}, a fast sockets replacement.
+Built events are to be written out in the packed RAT ROOT format in ROOT TTrees. ROOT files provide many advantages over plain C or Fortran binaries, including built-in MD5 checksumming and convenient analysis features such as interactive histogramming.
 
 \subsection{Threads}
 To leverage modern commodity multiprocessing, the event builder makes heavy use of POSIX threads (pthreads). The main event builder process spawns two threads at startup: the listener and the shipper. When the listener accepts an incoming connection, it opens a new port for communication and launches a new thread. In this way, each XL3 is communicating with a single thread. As noted in the introduction, performance is best when the event builder communicates directly with the XL3s; that is, when they are not hidden behind a single DAQ computer.
