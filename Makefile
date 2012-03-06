@@ -4,7 +4,7 @@ ORSRC = orca/ORCaen1720Decoder.cc orca/ORMTCDecoder.cc orca/ORPMTDecoder.cc
 
 INCLUDE = -I./include -I$(ROOTSYS)/include -I$(AVALANCHE) -I$(ORDIR)/Management $(ORINCLUDES)
 LFLAGS = -L/usr/local/lib -L$(ROOTSYS)/lib -L$(AVALANCHE)
-LIBS = -ljemalloc -pthread -lrt -lavalanche -lCore -lCint -lRIO $(ORLIBS)
+LIBS = -ljemalloc -lpthread -lrt -lavalanche -lCore -lCint -lRIO $(ORLIBS)
 CC = g++ -g
 
 all: directories root_dict event_builder

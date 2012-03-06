@@ -19,7 +19,6 @@ extern Buffer* event_buffer;
 extern Buffer* event_header_buffer;
 extern Buffer* run_header_buffer;
 
-extern pthread_mutex_t writer_mutex;
 extern TFile* outfile;
 extern TTree* tree;
 extern RAT::DS::PackedRec* rec;
@@ -59,11 +58,13 @@ void handler(int signal) {
 
         if (outfile && tree) {
             printf("Closing run file...\n");
-            pthread_mutex_lock(&writer_mutex);
             outfile->cd();
             tree->Write();
             outfile->Close();
-            pthread_mutex_unlock(&writer_mutex);
+            delete outfile;
+            outfile = NULL;
+            delete tree;
+            tree = NULL;
         }
 
         exit(0);

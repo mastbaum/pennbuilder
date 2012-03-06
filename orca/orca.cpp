@@ -8,20 +8,16 @@
 #include "orca.h"
 #include "ds.h"
 
-int kGTIdWindow = 10000; 
+const int kGTIdWindow = 10000000; 
+unsigned int gtid_last_received = 0;
+
+extern Buffer* event_buffer;
+extern Buffer* run_header_buffer;
 
 void handler(int signal);
 
-extern Buffer* event_buffer;
-extern Buffer* event_header_buffer;
-extern Buffer* run_header_buffer;
-
-extern pthread_mutex_t writer_mutex;
-extern TFile* outfile;
-extern TTree* tree;
-extern RAT::DS::PackedRec* rec;
-
-extern int run_active;
+int run_active;
+//pthread_mutex_t run_active_mutex;
 
 ORBuilderProcessor::ORBuilderProcessor(std::string /*label*/) {
     SetComponentBreakReturnsFailure();
@@ -39,7 +35,6 @@ ORBuilderProcessor::ORBuilderProcessor(std::string /*label*/) {
     AddProcessor(fRunProcessor);
 
     fTotalReceived = 0;
-    fFirstGTIdSet = false;
     fCurrentGTId = 0;
     fCaenOffset = 0;
     fCaenLastGTId = 0;
@@ -47,6 +42,8 @@ ORBuilderProcessor::ORBuilderProcessor(std::string /*label*/) {
     pCaenCount = 0;
     pPMTCount = 0;
     fEventOrder = 0;
+
+    //pthread_mutex_init(&run_active_mutex, NULL);
 }
 
 ORBuilderProcessor::~ORBuilderProcessor() {
@@ -57,15 +54,7 @@ ORBuilderProcessor::~ORBuilderProcessor() {
 }
 
 ORDataProcessor::EReturnCode ORBuilderProcessor::StartRun() {
-    std::cout << "run start: " << (int)GetRunContext()->GetRunNumber() << std::endl;
-
-    fCaenOffset = 0;
-    fCaenLastGTId = 0;
-    fFirstGTIdSet = false;
-    pMTCCount = 0;
-    pCaenCount = 0;
-    pPMTCount = 0;
-    fEventOrder = 0;
+    std::cout << "ORBuilderProcessor::StartRun: starting run " << (int)GetRunContext()->GetRunNumber() << std::endl;
 
     fMTCDataId = fMTCProcessor->GetDataId();
     fPMTDataId = fPMTProcessor->GetDataId();
@@ -82,42 +71,26 @@ ORDataProcessor::EReturnCode ORBuilderProcessor::StartRun() {
     rhdr->RunMask = 0;
     rhdr->CrateMask = 0;
     rhdr->FirstEventID = 0;
-    rhdr->ValidEventID = 0;
+    rhdr->ValidEventID = fCurrentGTId;
     rhdr->RunID = GetRunContext()->GetRunNumber();
-    buffer_push(run_header_buffer, RUN_HEADER, rhdr);
 
-    pthread_mutex_lock(&writer_mutex);
+    buffer_push(run_header_buffer, RUN_HEADER, rhdr);
+    std::cout << "pushed RHDR to buffer, write=" << run_header_buffer->write << std::endl;
+    //pthread_mutex_lock(&run_active_mutex);
     run_active = 1;
-    pthread_mutex_unlock(&writer_mutex);
+    //pthread_mutex_unlock(&run_active_mutex);
 
     fTotalReceived++;
     return kSuccess;
 }
 
 ORDataProcessor::EReturnCode ORBuilderProcessor::EndRun() {
-    std::cout << "run end: " << (int)GetRunContext()->GetRunNumber() << std::endl;
-    std::cout << "received " << fTotalReceived << " records so far" << std::endl;
+    std::cout << "ORBuilderProcessor::EndRun: ending run " << (int)GetRunContext()->GetRunNumber() << std::endl;
+    std::cout << "ORBuilderProcessor::EndRun: received " << fTotalReceived << " records so far" << std::endl;
 
-    pthread_mutex_lock(&writer_mutex);
-    if (run_active && outfile && tree) {
-        printf("closing run file...\n");
-        outfile->cd();
-        tree->Write();
-        outfile->Close();
-    }
-    pthread_mutex_unlock(&writer_mutex);
-
-    fCaenOffset = 0;
-    fCaenLastGTId = 0;
-    fFirstGTIdSet = false;
-    pMTCCount = 0;
-    pCaenCount = 0;
-    pPMTCount = 0;
-    fEventOrder = 0;
-
-    pthread_mutex_lock(&writer_mutex);
+    //pthread_mutex_lock(&run_active_mutex);
     run_active = 0;
-    pthread_mutex_unlock(&writer_mutex);
+    //pthread_mutex_unlock(&run_active_mutex);
 
     fTotalReceived++;
     return kSuccess;
@@ -136,16 +109,6 @@ ORDataProcessor::EReturnCode ORBuilderProcessor::ProcessDataRecord(UInt_t* recor
 
         uint32_t gtid = record[4] & 0xffffff;    
         uint64_t keyid = buffer_keyid(event_buffer, gtid);
-
-            if (!fFirstGTIdSet) {
-                fCurrentGTId = gtid;
-                fFirstGTIdSet = true;
-            }
-
-	if (gtid > fCurrentGTId + kGTIdWindow || gtid < fCurrentGTId - kGTIdWindow) {
-            std::cout << "got way out of sequence gtid: this " << gtid << ", prev " << fCurrentGTId << std::endl;
-            return kSuccess; //fixme
-        }
 
         fCurrentGTId = gtid;
 
@@ -169,6 +132,7 @@ ORDataProcessor::EReturnCode ORBuilderProcessor::ProcessDataRecord(UInt_t* recor
             er->event = new RAT::DS::PackedEvent();
         }
 
+        //er->event->eventID = gtid;
         er->event->EVOrder = fEventOrder;
         fEventOrder++;
 
@@ -196,20 +160,13 @@ ORDataProcessor::EReturnCode ORBuilderProcessor::ProcessDataRecord(UInt_t* recor
 	//std::cout << "got megabundle" << std::endl;
 
         unsigned int bundle_length = (fPMTDecoder.LengthOf(record) - 2) / 3;
+        //printf("bundle_length %i\n", bundle_length);
         record += 2;
         for (; bundle_length != 0; bundle_length--) {
             uint32_t gtid = fPMTDecoder.GTId(record);
             uint64_t keyid = buffer_keyid(event_buffer, gtid);
 
-            if (!fFirstGTIdSet) {
-                fCurrentGTId = gtid;
-                fFirstGTIdSet = true;
-            }
-
-	    if (gtid > fCurrentGTId + kGTIdWindow || gtid < fCurrentGTId - kGTIdWindow) {
-                std::cout << "got way out of sequence gtid: this " << gtid << ", prev " << fCurrentGTId << std::endl;
-                return kSuccess;
-            }
+            //printf("gtid %i, bundles remaining %i\n", gtid, bundle_length);
 
             fCurrentGTId = gtid;
 	    //std::cout << "bundle gtid: " << gtid << std::endl;
@@ -230,6 +187,8 @@ ORDataProcessor::EReturnCode ORBuilderProcessor::ProcessDataRecord(UInt_t* recor
             }
 
             RAT::DS::PMTBundle rpmtb;
+            //std::cout << "crate: " << (int)fPMTDecoder.Crate(record) << std::endl;
+            //std::cout << "card:  " << (int)fPMTDecoder.Card(record) << std::endl;
             rpmtb.Word[0] = fPMTDecoder.Wrd0(record);
             rpmtb.Word[1] = fPMTDecoder.Wrd1(record);
             rpmtb.Word[2] = fPMTDecoder.Wrd2(record);
@@ -257,16 +216,6 @@ ORDataProcessor::EReturnCode ORBuilderProcessor::ProcessDataRecord(UInt_t* recor
         gtid &= 0x00ffffff;
         if (pPMTCount == 0 && fEventOrder == 0)
             event_buffer->offset = gtid;
-
-            if (!fFirstGTIdSet) {
-                fCurrentGTId = gtid;
-                fFirstGTIdSet = true;
-            }
-
-	if (gtid > fCurrentGTId + kGTIdWindow || gtid < fCurrentGTId - kGTIdWindow) {
-            std::cout << "got way out of sequence gtid: this " << gtid << ", prev " << fCurrentGTId << std::endl;
-            return kSuccess;
-        }
 
         fCurrentGTId = gtid;
 
@@ -323,7 +272,7 @@ ORDataProcessor::EReturnCode ORBuilderProcessor::ProcessDataRecord(UInt_t* recor
 
         std::cout << "run packet obtained" << std::endl;
         if (record[1] & 0x8)
-            std::cout << "run hearteeat obtained" << std::endl;
+            std::cout << "run heartbeat obtained" << std::endl;
         else if (record[1] & 0x1) {
             std::cout << "run start obtained" << std::endl;
             if (record[1] & 0x2)
@@ -333,8 +282,18 @@ ORDataProcessor::EReturnCode ORBuilderProcessor::ProcessDataRecord(UInt_t* recor
         }
         else {
             std::cout << "run end obtained" << std::endl;
-            if (record[1] & 0x2)
+            if (record[1] & 0x2) {
                 std::cout << "soft end" << std::endl;
+            }
+            else {
+                fCurrentGTId = 0;
+                fCaenOffset = 0;
+                fCaenLastGTId = 0;
+                pMTCCount = 0;
+                pCaenCount = 0;
+                pPMTCount = 0;
+                fEventOrder = 0;
+            }
             if (record[1] & 0x4)
                 std::cout << "remote control" << std::endl;
         }
@@ -345,6 +304,7 @@ ORDataProcessor::EReturnCode ORBuilderProcessor::ProcessDataRecord(UInt_t* recor
         std::cout << "unhandled record: id: " << std::hex << (int)thisDataId << std::dec << std::endl;
     }
 
+    gtid_last_received = fCurrentGTId;
     fTotalReceived++;
     return kSuccess;
 }
@@ -396,8 +356,8 @@ void* orca_listener(void* arg) {
         /* Starting server, binding to a port. */
         if (!server->IsValid()) {
             std::cout << "Error listening on port " << portToListenOn 
-                      << std::endl << "Error code: " << server->GetErrorCode()
-                      << std::endl;
+                << std::endl << "Error code: " << server->GetErrorCode()
+                << std::endl;
             return NULL;
         }
 
@@ -414,7 +374,7 @@ void* orca_listener(void* arg) {
                 if(childPIDRecord.erase(childpid) != 1) {
                     /* Something really weird happened. */
                     std::cout << "Ended child process " << childpid 
-                              << " not recognized!" << std::endl;
+                        << " not recognized!" << std::endl;
                 }
             }
             while((childpid = wait3(0,WNOHANG,0)) > 0) {
@@ -423,7 +383,7 @@ void* orca_listener(void* arg) {
                 if(childPIDRecord.erase(childpid) != 1) {
                     /* Something really weird happened. */
                     std::cout << "Ended child process " << childpid 
-                              << " not recognized!" << std::endl;
+                        << " not recognized!" << std::endl;
                 }
             } 
             std::cout << childPIDRecord.size()  << " connections running..." << std::endl;
@@ -451,7 +411,7 @@ void* orca_listener(void* arg) {
             } 
             /* Parent process: wait for next connection. Close our descriptor. */
             std::cout << "Connection accepted, child process begun with pid: " 
-                      << childpid << std::endl;
+                << childpid << std::endl;
             childPIDRecord.insert(childpid);
             delete sock; 
         }
