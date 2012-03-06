@@ -10,8 +10,6 @@
 #define NFECS 16
 #define NCHANS 32 
 
-void close_sockets();
-void handler(int signal);
 void die(const char *msg);
 void* listener_child(void* psock);
 void* listener(void* ptr);

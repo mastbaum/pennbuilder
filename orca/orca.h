@@ -40,6 +40,7 @@ class ORBuilderProcessor : public ORCompoundDataProcessor {
         unsigned int fEventOrder;
 
         ULong_t fTotalReceived;
+        ULong_t pUnhandledCount;
 	UInt_t fCurrentGTId;
         bool fFirstGTIdSet;
         UInt_t fMTCDataId;

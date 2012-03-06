@@ -30,6 +30,9 @@ uint32_t pmtbundle_pmtid(XL3PMTBundle* p);
 /// Event plus metadata
 typedef struct {
     uint32_t gtid;
+    bool has_bundles;
+    bool has_mtc;
+    bool has_caen;
     clock_t arrival_time;
     RAT::DS::PackedEvent* event;
 } EventRecord;

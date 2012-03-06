@@ -14,16 +14,14 @@
 #include "PackedEvent.hh"
 #include "shipper.h"
 #include "ds.h"
+#include "handler.h"
+
+#define COUNT_INTERVAL 10000
 
 extern Buffer* event_buffer;
 extern Buffer* event_header_buffer;
 extern Buffer* run_header_buffer;
-
 extern unsigned int gtid_last_received;
-
-void handler(int signal);
-
-//extern pthread_mutex_t run_active_mutex;
 extern int run_active;
 
 TFile* outfile = NULL;
@@ -31,9 +29,7 @@ TTree* tree = NULL;
 //RAT::DS::PackedRec* rec = NULL;
 RAT::DS::PackedEvent* rec = NULL;
 
-void* shipper(void* ptr)
-{
-    clock_t time_now;
+void* shipper(void* ptr) {
     clock_t time_last_shipped = clock();
     unsigned int gtid_last_shipped = 0;
     char filename[100];
@@ -41,13 +37,13 @@ void* shipper(void* ptr)
     avalanche::server* dispatcher = new avalanche::server(DISPATCHER_ADDRESS);
     outfile = NULL;
     tree = NULL;
+    int run_id = 0;
 
+    unsigned long count = 0;
     signal(SIGINT, &handler);
     while (1) {
-        //pthread_mutex_lock(&run_active_mutex);
-        //std::cout << "lock ra 1\n";
         bool buffer_flushing = !run_active && (gtid_last_shipped < gtid_last_received);
-        if (!run_active && !buffer_flushing) {
+        if (!run_active) { // && !buffer_flushing) {
             if (outfile && tree) {
                 outfile->cd();
                 tree->Write();
@@ -56,25 +52,14 @@ void* shipper(void* ptr)
                 outfile = NULL;
                 printf("shipper: closed run file\n");
             }
-            //pthread_mutex_unlock(&run_active_mutex);
-            //std::cout << "unlock ra 1a\n";
             continue;
         }
-        //pthread_mutex_unlock(&run_active_mutex); 
-        //std::cout << "unlock ra 1b\n";
 
-        //unsigned gtid_tail = event_buffer->keys[event_buffer->read] ? ((EventRecord*)(event_buffer->keys[event_buffer->read]))->gtid : 0;
-        //printf("tail %i / shipped %i / recv %i\n", gtid_tail, gtid_last_shipped, gtid_last_received);
 
-        time_now = clock();
-
-        //printf("yo\n");
         // skipped gtid timeout
-        //pthread_mutex_lock(&event_buffer->mutex_read);
-        //std::cout << "lock e 1\n";
         EventRecord* ertemp = (EventRecord*) event_buffer->keys[event_buffer->read];
         if (!ertemp) {
-            if ((float)(time_now - time_last_shipped) / CLOCKS_PER_SEC > SKIP_GTID_DELAY) {
+            if ((float)(clock() - time_last_shipped) / CLOCKS_PER_SEC > SKIP_GTID_DELAY) {
                 RecordType rtemp;
                 buffer_pop(event_buffer, &rtemp, (void**)&ertemp);
                 time_last_shipped = clock();
@@ -82,16 +67,14 @@ void* shipper(void* ptr)
             }
             continue;
         }
-        //pthread_mutex_unlock(&event_buffer->mutex_read);
-        //std::cout << "unlock e 1\n";
 
-        printf("buffer size: %i, flushing: %s\n", (event_buffer->write-event_buffer->read)%event_buffer->size, buffer_flushing ? "yes" : "no");
+        if (false) { //count % COUNT_INTERVAL == 0) {
+            unsigned gtid_tail = event_buffer->keys[event_buffer->read] ? ((EventRecord*)(event_buffer->keys[event_buffer->read]))->gtid : 0;
+            printf("run %i // tail %#x | shipped %#x | recv %#x // wid %lu | flushing: %s\n", run_id, gtid_tail, gtid_last_shipped, gtid_last_received, (event_buffer->write-event_buffer->read)%event_buffer->size, "what?"); //buffer_flushing ? "yes" : "no");
+        }
 
         // loop through run headers looking for an RHDR
-        if (!buffer_flushing) {
-            //buffer_status(run_header_buffer);
-            //pthread_mutex_lock(&run_header_buffer->mutex_read);
-            //std::cout << "lock rh 1\n";
+        //if (!buffer_flushing) {
             int irhdr = run_header_buffer->read;
             while (run_header_buffer->keys[irhdr]) {
                 if (run_header_buffer->type[irhdr] == RUN_HEADER) {
@@ -105,9 +88,9 @@ void* shipper(void* ptr)
                             outfile = NULL;
                             printf("shipper: closed file for soft run start\n");
                         }
-                        int run_id = h->RunID;
+                        run_id = h->RunID;
                         sprintf(filename, "run_%i.root", run_id);
-                        printf("shipper: starting new run: id %i, gtid %i (%s)\n", run_id, h->ValidEventID, filename);
+                        printf("shipper: starting new run: id %i, gtid %#x (%s)\n", run_id, h->ValidEventID, filename);
                         //rec = new RAT::DS::PackedRec();
                         rec = new RAT::DS::PackedEvent();
                         //tree->Branch("PackRec", rec->ClassName(), &rec, 32000, 99);
@@ -120,27 +103,17 @@ void* shipper(void* ptr)
                 irhdr++;
                 irhdr %= run_header_buffer->size;
             }
-            //pthread_mutex_unlock(&run_header_buffer->mutex_read);
-            //std::cout << "unlock rh 1\n";
 
             // hold until we get a run header
-            //pthread_mutex_lock(&run_active_mutex);
-            //std::cout << "lock ra 2\n";
-            if (!run_active) {
+            if (!run_active || !outfile) {
                 if (!print_rh_waiting) {
                     printf("shipper: waiting for run header...\n");
                     print_rh_waiting = true;
                 }
-                //pthread_mutex_unlock(&run_active_mutex);
-                //std::cout << "unlock ra 2a\n";
                 continue;
             }
-            //pthread_mutex_unlock(&run_active_mutex);
-            //std::cout << "unlock ra 2b\n";
             print_rh_waiting = false;
 
-            //pthread_mutex_lock(&run_header_buffer->mutex_read);
-            //std::cout << "lock rh 2\n";
             while (run_header_buffer->keys[run_header_buffer->read]) {
                 void* header = run_header_buffer->keys[run_header_buffer->read];
                 RecordType r = run_header_buffer->type[run_header_buffer->read];
@@ -155,22 +128,26 @@ void* shipper(void* ptr)
                 if (first_gtid <= ertemp->gtid) {
                     buffer_pop(run_header_buffer, &r, &header);
                     if (r == RUN_HEADER) {
+                        printf("\n\n\n RUN HEADER \n\n\n\n");
                         //rec->RecordType = (int) r;
                         //rec->Rec = (RAT::DS::RHDR*) header;
                         //tree->Fill();
                         //dispatcher->sendObject(rec);
+                        dispatcher->sendObject((RAT::DS::RHDR*)header);
                     }
                     else if (r == AV_STATUS_HEADER) {
                         //rec->RecordType = (int) r;
                         //rec->Rec = (RAT::DS::CAAC*) header;
                         //tree->Fill();
                         //dispatcher->sendObject(rec);
+                        dispatcher->sendObject((RAT::DS::CAAC*)header);
                     }
                     else if (r == MANIPULATOR_STATUS_HEADER) {
                         //rec->RecordType = (int) r;
                         //rec->Rec = (RAT::DS::CAST*) header;
                         //tree->Fill();
                         //dispatcher->sendObject(rec);
+                        dispatcher->sendObject((RAT::DS::CAST*)header);
                     }
                     else {
                         printf("shipper: encountered header of unknown type %i in run header buffer\n", r);
@@ -181,13 +158,9 @@ void* shipper(void* ptr)
 
                 free(header);
             }
-            //pthread_mutex_unlock(&run_header_buffer->mutex_read);
-            //std::cout << "unlock rh 2\n";
-        }
+        //}
 
         // ship event-level headers
-        //pthread_mutex_lock(&event_buffer->mutex_read);
-        //std::cout << "lock e 2\n";
         while (event_header_buffer->keys[event_header_buffer->read]) {
             void* header = event_header_buffer->keys[event_header_buffer->read];
             RecordType r = event_header_buffer->type[event_header_buffer->read];
@@ -204,12 +177,14 @@ void* shipper(void* ptr)
                     //rec->Rec = (RAT::DS::TRIG*) header;
                     //tree->Fill();
                     //dispatcher->sendObject(rec);
+                    dispatcher->sendObject((RAT::DS::TRIG*)header);
                 }
                 else if (r == EPED_BANK_HEADER) {
                     //rec->RecordType = (int) r;
                     //rec->Rec = (RAT::DS::EPED*) header;
                     //tree->Fill();
                     //dispatcher->sendObject(rec);
+                    dispatcher->sendObject((RAT::DS::EPED*)header);
                 }
                 else {
                     printf("shipper: encountered header of unknown type %i in event header buffer\n", r);
@@ -219,12 +194,10 @@ void* shipper(void* ptr)
             else
                 break;
         }
-        //pthread_mutex_unlock(&event_buffer->mutex_read);
-        //std::cout << "unlock e 2\n";
 
         if (ertemp) {
             clock_t time_event = ertemp->arrival_time;
-            if((float)(time_now - time_event) / CLOCKS_PER_SEC < QUEUE_DELAY) {
+            if((float)(clock() - time_event) / CLOCKS_PER_SEC < QUEUE_DELAY) {
                 continue;
             }
         }
@@ -241,16 +214,29 @@ void* shipper(void* ptr)
             else {
                 //rec->RecordType = (int) DETECTOR_EVENT;
                 //rec->Rec = (RAT::DS::GenericRec*) er->event;
-                rec = er->event;
-                tree->Fill();
-                dispatcher->sendObject(rec);
-                gtid_last_shipped = er->gtid;
-                //printf("shipper: shipped event with gtid %i\n", er->gtid);
+                if (er->has_bundles && er->has_mtc) {
+                    rec = er->event;
+                    tree->Fill();
+                    dispatcher->sendObject(rec);
+                    gtid_last_shipped = er->gtid;
+                    //printf("shipper: shipped event with gtid %i\n", er->gtid);
+                }
+                /*
+                else {
+                    if (!er->has_bundles)
+                        printf("shipper: gtid %#x has no pmt data\n", er->gtid);
+                    if (!er->has_mtc)
+                        printf("shipper: gtid %#x has no mtc data\n", er->gtid);
+                    if (!er->has_caen)
+                        printf("shipper: gtid %#x has no caen data\n", er->gtid);
+                }
+                */
                 delete e;
                 delete er;
             }
         }
         time_last_shipped = clock();
+        count++;
     }
 
     delete outfile;
