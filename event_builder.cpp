@@ -31,15 +31,21 @@ Buffer* run_header_buffer;
 int main(int argc, char *argv[])
 {
     int port;
-    std::string orcahost = "snoplusdaq1.snolab.ca";
-    int orcaport = 44666;
 
-    if(argc != 2) {
-        printf("Usage: %s <port>\n", argv[0]);
+    if (argc > 1) {
+        port = atoi(argv[1]);
+    }
+    else {
+        printf("Usage: %s <port> [orca_address orca_port]\n", argv[0]);
         exit(1);
     }
-    else
-        port = atoi(argv[1]);
+
+    OrcaURL* url = NULL;
+    if (argc == 4) {
+        url = new OrcaURL();
+        url->host = argv[2];
+        url->port = atoi(argv[3]);
+    }
 
     // initialization
     assert(buffer_alloc(&event_buffer, EVENT_BUFFER_SIZE));
@@ -50,19 +56,22 @@ int main(int argc, char *argv[])
     pthread_t tlistener;
     pthread_create(&tlistener, NULL, listener, (void*)&port);
 
-    OrcaURL* url = new OrcaURL();
-    url->host = orcahost;
-    url->port = orcaport;
     pthread_t torcalistener;
-    pthread_create(&torcalistener, NULL, orca_listener, (void*)&url);
+    if (url) {
+        pthread_create(&torcalistener, NULL, orca_listener, (void*)url);
+    }
 
     pthread_t tshipper;
     pthread_create(&tshipper, NULL, shipper, NULL);
 
     // wait for threads to join before exiting
     pthread_join(tlistener, NULL);
-    pthread_join(torcalistener, NULL);
+    if (url) {
+        pthread_join(torcalistener, NULL);
+    }
     pthread_join(tshipper, NULL);
+
+    delete url;
 
     return 0;
 }

@@ -12,7 +12,7 @@
 #define MAX_ROPES 10
 
 struct OrcaURL {
-    std::string host;
+    char* host;
     int port;
 };
 

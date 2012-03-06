@@ -39,10 +39,13 @@ class ORBuilderProcessor : public ORCompoundDataProcessor {
         unsigned int pPMTCount;
         unsigned int fEventOrder;
 
-        unsigned int fMTCDataId;
-        unsigned int fCaenDataId;
-        unsigned int fPMTDataId;
-        unsigned int fRunDataId;
+        ULong_t fTotalReceived;
+	UInt_t fCurrentGTId;
+        bool fFirstGTIdSet;
+        UInt_t fMTCDataId;
+        UInt_t fCaenDataId;
+        UInt_t fPMTDataId;
+        UInt_t fRunDataId;
 };
 
 void* orca_listener(void* arg);
