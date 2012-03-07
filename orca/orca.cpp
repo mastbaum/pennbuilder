@@ -10,7 +10,6 @@
 #include "ds.h"
 
 const int kGTIdWindow = 10000000; 
-unsigned int gtid_last_received = 0;
 
 extern Buffer* event_buffer;
 extern Buffer* run_header_buffer;
@@ -269,14 +268,19 @@ ORDataProcessor::EReturnCode ORBuilderProcessor::ProcessDataRecord(UInt_t* recor
             fEventOrder = 0;
         }
 
-        printf("%i/%#x: caen %f | pmt %f | mtc %f | unhandled %f\n", (int)GetRunContext()->GetRunNumber(), fCurrentGTId, (float)pCaenCount/fEventOrder, (float)pPMTCount/fEventOrder, (float)pMTCCount/fEventOrder, (float)pUnhandledCount/fTotalReceived);
+        printf("orca: %i/%#x: caen %f | pmt %f | mtc %f | unhandled %f\n",
+            (int)GetRunContext()->GetRunNumber(),
+            fCurrentGTId,
+            (float)pCaenCount/fEventOrder,
+            (float)pPMTCount/fEventOrder,
+            (float)pMTCCount/fEventOrder,
+            (float)pUnhandledCount/fTotalReceived);
     }
     else {
         //std::cout << "unhandled record: id: " << std::hex << (int)thisDataId << std::dec << std::endl;
         pUnhandledCount++;
     }
 
-    gtid_last_received = fCurrentGTId;
     fTotalReceived++;
     return kSuccess;
 }
