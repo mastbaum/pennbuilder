@@ -16,12 +16,9 @@ extern Buffer* run_header_buffer;
 
 extern TFile* outfile;
 extern TTree* tree;
-extern RAT::DS::PackedRec* rec;
 
 extern int sockfd;
 extern int thread_sockfd[NUM_THREADS];
-
-extern int run_active;
 
 void close_sockets() {
     int i;
@@ -33,7 +30,6 @@ void close_sockets() {
 void handler(int signal) {
     if (signal == SIGINT) {
         printf("\nCaught CTRL-C (SIGINT), Exiting...\n");
-        run_active = 0;
 
         if (!buffer_isempty(event_buffer)) {
             printf("Warning: exiting with non-empty event buffer\n");
@@ -51,15 +47,13 @@ void handler(int signal) {
         printf("Closing sockets...\n");
         close_sockets();
 
-        if (outfile && tree) {
+        if (outfile) {
             printf("Closing run file...\n");
             outfile->cd();
             tree->Write();
             outfile->Close();
             delete outfile;
             outfile = NULL;
-            delete tree;
-            tree = NULL;
         }
 
         exit(0);

@@ -41,16 +41,16 @@ void* shipper(void* ptr) {
     while (1) {
         if ((float)(clock() - time_last_print) / CLOCKS_PER_SEC > 1.0) {
             unsigned gtid_tail = event_buffer->keys[event_buffer->read] ? \
-                                 ((EventRecord*)(event_buffer->keys[event_buffer->read]))->gtid : 0;
-            unsigned gtid_head = event_buffer->keys[event_buffer->write] ? \
-                                 ((EventRecord*)(event_buffer->keys[event_buffer->write]))->gtid : 0;
+                                 ((EventRecord*)(event_buffer->keys[event_buffer->read]))->gtid : 1;
+            unsigned gtid_head = event_buffer->keys[event_buffer->write-1] ? \
+                                 ((EventRecord*)(event_buffer->keys[event_buffer->write-1]))->gtid : 1;
 
-            printf("shipper: run %i: tail %#x | shipped %#x | recv %#x | wid %lu\n",
-                run_id,
-                gtid_tail,
-                gtid_last_shipped,
-                gtid_head,
-                (event_buffer->write-event_buffer->read)%event_buffer->size);
+            printf("shipper: run %#x: tail %#x | shipped %#x | recv %#x | wid %lu\n",
+                    run_id,
+                    gtid_tail,
+                    gtid_last_shipped,
+                    gtid_head,
+                    (event_buffer->write-event_buffer->read)%event_buffer->size);
 
             time_last_print = clock();
         }
@@ -239,8 +239,9 @@ void* shipper(void* ptr) {
             }
         }
         time_last_shipped = clock();
-}
+    }
 
-delete outfile;
+    if (outfile)
+        delete outfile;
 }
 

@@ -200,6 +200,7 @@ ORDataProcessor::EReturnCode ORBuilderProcessor::ProcessDataRecord(UInt_t* recor
             gtid++;
         gtid += fCaenOffset;
         gtid &= 0x00ffffff;
+
         if (pPMTCount == 0 && fEventOrder == 0)
             event_buffer->offset = gtid;
 
