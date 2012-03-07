@@ -69,7 +69,10 @@ ORDataProcessor::EReturnCode ORBuilderProcessor::StartRun() {
     rhdr->FirstEventID = 0;
     rhdr->ValidEventID = fCurrentGTId;
     rhdr->RunID = GetRunContext()->GetRunNumber();
-    buffer_push(run_header_buffer, RUN_HEADER, rhdr);
+    if (buffer_push(run_header_buffer, RUN_HEADER, rhdr) != 1) {
+        printf("orca: run header buffer overflow. data lost!\n");
+        delete rhdr;
+    }
 
     run_active = 1;
     fTotalReceived++;
@@ -115,6 +118,11 @@ ORDataProcessor::EReturnCode ORBuilderProcessor::ProcessDataRecord(UInt_t* recor
             er->arrival_time = 0;
             er->gtid = 0;
             buffer_insert(event_buffer, gtid, DETECTOR_EVENT, (void*)er);
+        }
+
+        if (er->has_mtc) {
+            printf("orca: duplicate mtc data for gtid %#x. data lost!\n", gtid);
+            return kSuccess;
         }
 
         er->has_mtc = true;
@@ -216,6 +224,11 @@ ORDataProcessor::EReturnCode ORBuilderProcessor::ProcessDataRecord(UInt_t* recor
         if (!er) {
             er = new EventRecord();
             buffer_insert(event_buffer, gtid, DETECTOR_EVENT, (void*)er);
+        }
+
+        if (er->has_caen) {
+            printf("orca: duplicate caen data for gtid %#x. data lost!\n", gtid);
+            return kSuccess;
         }
             
         er->has_caen = true;

@@ -39,7 +39,7 @@ void* shipper(void* ptr) {
 
     signal(SIGINT, &handler);
     while (1) {
-        if ((float)(clock() - time_last_print) / CLOCKS_PER_SEC > 1.0) {
+        if ((float)(clock() - time_last_print) / CLOCKS_PER_SEC > 0.5) {
             unsigned gtid_tail = event_buffer->keys[event_buffer->read] ? \
                                  ((EventRecord*)(event_buffer->keys[event_buffer->read]))->gtid : 1;
             unsigned gtid_head = event_buffer->keys[event_buffer->write-1] ? \
@@ -220,7 +220,12 @@ void* shipper(void* ptr) {
                 gtid_last_shipped = er->gtid;
                 if (er->has_bundles && er->has_mtc) {
                     rec = er->event;
-                    tree->Fill();
+                    if (tree) {
+                        tree->Fill();
+                    }
+                    else {
+                        std::cout << "shipper: WARNING: tree unavailable for writing. events lost." << std::endl;
+                    }
                     dispatcher->sendObject(rec);
                     //printf("shipper: shipped event with gtid %i\n", er->gtid);
                 }
@@ -241,6 +246,7 @@ void* shipper(void* ptr) {
         time_last_shipped = clock();
     }
 
+    delete dispatcher;
     if (outfile)
         delete outfile;
 }

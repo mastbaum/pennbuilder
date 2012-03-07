@@ -78,7 +78,7 @@ Built events are to be written out in the packed RAT ROOT format in ROOT TTrees.
 To leverage modern commodity multiprocessing, the event builder makes heavy use of POSIX threads (pthreads). The main event builder process spawns two threads at startup: the listener and the shipper. When the listener accepts an incoming connection, it opens a new port for communication and launches a new thread. In this way, each XL3 is communicating with a single thread. As noted in the introduction, performance is best when the event builder communicates directly with the XL3s; that is, when they are not hidden behind a single DAQ computer.
 
 \subsubsection{Thread Safety}
-With many threads simultaneously accessing the same ring buffer, care must be taken to ensure data integrity. All functions which can modify data are protected with pthreads mutexes. A mutex is stored at the Buffer level, and enforced when a thread is creating/removing an event/header. Under normal operating conditions, only one PMT bundle per PMT per event can be received, and locking conditions have been tuned for best performance with this in mind.
+With many threads simultaneously accessing the same ring buffer, care must be taken to ensure data integrity. All functions which can modify data are protected with pthreads mutexes. Buffer elements are protected individually for high performance.
 
 \section{Platform}
 The event builder is optimized for use in a Linux or UNIX environment running on commodity hardware. Given the high number of threaded XL3/DAQ connections, a 24-thread CPU would be ideal, but is not a requirement. The amount of memory required will depend on the average trigger rate of the detector. ECC memory DIMMs providing up to 64 GB are readily available, which could provide buffering of over several hundred thousand events -- several minutes of buffer. Such a system could be built for approximately \$5000 USD, given current market values.
@@ -98,10 +98,10 @@ A new event builder for SNO+ has been written that takes advantage of:
 \item A new DAQ architecture wherein data is pushed from the front-end electronics, rather than pulled by a DAQ process
 \item TCP/IP as a standard for communication between DAQ components
 \item Symmetric multiprocessing with POSIX threads
-\item Modern, thread-optimized memory allocators
+\item Thread-optimized memory allocators
 \end{itemize}
 
-to achieve a lightweight, simple, and robust design. Excluding the data structures, the code base of the event builder comprises approximately 500 lines of pure C. The event builder runs on inexpensive commodity hardware in Linux or UNIX environments, enabling rapid deployment, easy maintenance, and assurance of long-term platform support.
+to achieve a lightweight, simple, and robust design. Excluding the data structures and ORCA components, the code base of the event builder comprises approximately 1000 lines of C++ and ISO C. The event builder runs on inexpensive commodity hardware in POSIX environments, enabling rapid deployment, easy maintenance, and assurance of long-term platform support.
 
 \end{document}
 

@@ -2,16 +2,19 @@ pennbuilder Event Builder
 =========================
 Introduction
 ------------
-pennbuilder is a fast, lightweight event builder for the SNO+ experiment. It was developed primarily for support of monitoring tool development, since those tools require build data. Designed from the ground up for speed, it makes use of threading, the jemalloc thread-optimized memory allocator, and optimized data structures to achieve very high throughput. Logic tracking the readout of the front-end electronics provides an additional performance boost, since a fixed timeout is no longer needed to tell whether an event is complete.
+pennbuilder is a fast, lightweight event builder for the SNO+ experiment. It was developed primarily for support of monitoring tool development, since those tools require build data. Designed from the ground up for speed, it makes use of threading, the jemalloc thread-optimized memory allocator, and optimized data structures to achieve high throughput.
 
 Installation
 ------------
 Dependencies:
 
-* C compiler. Only tested with GCC.
-* jemalloc library (http://www.canonware.com/jemalloc/)
+* C++ compiler. Only tested with GCC.
 * pthreads library (-lpthread) (POSIX) 
 * rt (time) library (-lrt) (POSIX)
+* jemalloc library (http://www.canonware.com/jemalloc/)
+* ROOT 5.32 (http://root.cern.ch)
+* OrcaRoot (http://orca.physics.unc.edu/~markhowe/Subsystems/ORCARoot.html)
+* avalanche (http://github.com/mastbaum/avalanche)
 
 To make:
 
