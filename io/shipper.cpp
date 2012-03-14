@@ -31,6 +31,9 @@ struct BuilderState {
 
 extern RunState run_state;
 
+bool flush_all_buffers = false;
+bool flush_complete = false;
+
 TFile* outfile = NULL;
 TTree* tree = NULL;
 //RAT::DS::PackedRec* rec = NULL;
@@ -46,21 +49,30 @@ void* shipper(void* ptr) {
     tree = NULL;
     int run_id = 0;
     clock_t time_last_print = 0;
+    clock_t run_start_time = clock();
 
     signal(SIGINT, &handler);
     while (1) {
-        if ((float)(clock() - time_last_print) / CLOCKS_PER_SEC > 0.5) {
-            unsigned gtid_tail = event_buffer->keys[event_buffer->read] ? \
-                                 ((EventRecord*)(event_buffer->keys[event_buffer->read]))->gtid : 1;
-            unsigned gtid_head = event_buffer->keys[event_buffer->write-1] ? \
-                                 ((EventRecord*)(event_buffer->keys[event_buffer->write-1]))->gtid : 1;
+        if (flush_all_buffers && buffer_isempty(event_buffer) && buffer_isempty(event_header_buffer) && buffer_isempty(run_header_buffer)) {
+            printf("shipper: flushed all buffers -----------------------------\n");
+            flush_complete = true;
+        }
 
-            printf("shipper: run %#x: tail %#x | shipped %#x | recv %#x | wid %lu\n",
-                    run_id,
-                    gtid_tail,
-                    gtid_last_shipped,
+        if ((float)(clock() - time_last_print) / CLOCKS_PER_SEC > 0.25) {
+            unsigned gtid_head = event_buffer->keys[event_buffer->write-1] ? \
+                                 ((EventRecord*)(event_buffer->keys[event_buffer->write-1]))->gtid : 0;
+
+            printf("shipper: run %i: events (%#x) %lu..<%lu>..%lu (%#x) | headers %lu..<%lu>..%lu  | %s\n",
+                    outfile ? run_id : 0,
                     gtid_head,
-                    (event_buffer->write-event_buffer->read)%event_buffer->size);
+                    event_buffer->read,
+                    (event_buffer->write-event_buffer->read) % event_buffer->size,
+                    event_buffer->write,
+                    gtid_last_shipped,
+                    run_header_buffer->read,
+                    (run_header_buffer->write-run_header_buffer->read) % run_header_buffer->size,
+                    run_header_buffer->write,
+                    run_active ? "running" : "run stoppped");
 
             time_last_print = clock();
         }
@@ -74,49 +86,90 @@ void* shipper(void* ptr) {
                 outfile = NULL;
                 printf("shipper: closed run file\n");
             }
+            //printf("no run and empty buffer\n");
             continue;
         }
 
-        // skipped gtid timeout
         EventRecord* ertemp = (EventRecord*) event_buffer->keys[event_buffer->read];
+        // skipped gtid timeout
         if (!ertemp) {
             if ((float)(clock() - time_last_shipped) / CLOCKS_PER_SEC > SKIP_GTID_DELAY) {
                 RecordType rtemp;
                 buffer_pop(event_buffer, &rtemp, (void**)&ertemp);
                 time_last_shipped = clock();
-                printf("shipper: skipped missing gtid after timeout\n");
+                printf("shipper: skipped missing gtid after timeout, run_active %i\n", run_active);
             }
+            //printf("active run but no event\n");
             continue;
         }
 
-        // loop through run headers looking for an RHDR
-        int irhdr = run_header_buffer->read;
-        while (run_header_buffer->keys[irhdr]) {
-            if (run_header_buffer->type[irhdr] == RUN_HEADER) {
-                RAT::DS::RHDR* h = (RAT::DS::RHDR*) run_header_buffer->keys[irhdr];
-                if (h->ValidEventID <= ertemp->gtid) {
-                    if (run_active && outfile && tree) {
-                        outfile->cd();
-                        tree->Write();
-                        outfile->Close();
-                        delete outfile;
-                        outfile = NULL;
-                        printf("shipper: closed file for soft run start\n");
-                    }
-                    run_id = h->RunID;
-                    sprintf(filename, "run_%i.root", run_id);
-                    printf("shipper: starting new run: id %i, gtid %#x (%s)\n", run_id, h->ValidEventID, filename);
-                    //rec = new RAT::DS::PackedRec();
-                    rec = new RAT::DS::PackedEvent();
-                    //tree->Branch("PackRec", rec->ClassName(), &rec, 32000, 99);
-                    tree = new TTree("PackT", "RAT Tree");
-                    outfile = new TFile(filename, "recreate");
-                    tree->Branch("PackEv", rec->ClassName(), &rec, 32000, 99);
-                    tree->SetAutoSave(10 * 1024 * 1024); // 10 MiB
+        if (ertemp->arrival_time >= run_start_time) {
+            while (run_header_buffer->keys[run_header_buffer->read]) {
+                void* header = run_header_buffer->keys[run_header_buffer->read];
+                RecordType r = run_header_buffer->type[run_header_buffer->read];
+                int first_gtid;
+                if (r == RUN_HEADER) {
+                    first_gtid = ((RAT::DS::RHDR*) header)->ValidEventID;
                 }
+                //printf("rh at tail: flushing %i, first_gtid %#x, run_end_idx %i, current idx %i\n", buffer_flushing, first_gtid, run_end_idx, run_header_buffer->read);
+                /*
+                if (r == AV_STATUS_HEADER)
+                    first_gtid = 0; //((CAAC*) header)->first_event_id;
+                if (r == MANIPULATOR_STATUS_HEADER)
+                    first_gtid = 0; //((CAST*) header)->first_event_id;
+                */
+
+                //EventRecord* er_run_end = (EventRecord*) event_buffer->keys[(long)run_end_idx];
+                if (ertemp->gtid >= first_gtid) {
+                    buffer_pop(run_header_buffer, &r, &header);
+                    if (r == RUN_HEADER) {
+                        RAT::DS::RHDR* rhdr = (RAT::DS::RHDR*) header;
+                        if (run_active && outfile && tree) {
+                            outfile->cd();
+                            tree->Write();
+                            outfile->Close();
+                            delete outfile;
+                            outfile = NULL;
+                            printf("shipper: closed run %i file for soft run start\n", run_id);
+                        }
+                        run_start_time = clock();
+                        run_id = rhdr->RunID;
+                        sprintf(filename, "run_%i.root", run_id);
+                        printf("shipper: starting new run: id %i, gtid %#x (%s)\n", run_id, rhdr->ValidEventID, filename);
+                        //rec = new RAT::DS::PackedRec();
+                        rec = new RAT::DS::PackedEvent();
+                        //tree->Branch("PackRec", rec->ClassName(), &rec, 32000, 99);
+                        tree = new TTree("PackT", "RAT Tree");
+                        outfile = new TFile(filename, "recreate");
+                        tree->Branch("PackEv", rec->ClassName(), &rec, 32000, 99);
+                        tree->SetAutoSave(10 * 1024 * 1024); // 10 MiB
+                        //rec->RecordType = (int) r;
+                        //rec->Rec = (RAT::DS::RHDR*) header;
+                        //tree->Fill();
+                        dispatcher->sendObject(rhdr);
+                    }
+                    else if (r == AV_STATUS_HEADER) {
+                        RAT::DS::CAAC* caac = (RAT::DS::CAAC*) header;
+                        //rec->RecordType = (int) r;
+                        //rec->Rec = (RAT::DS::CAAC*) header;
+                        //tree->Fill();
+                        dispatcher->sendObject(caac);
+                    }
+                    else if (r == MANIPULATOR_STATUS_HEADER) {
+                        RAT::DS::CAST* cast = (RAT::DS::CAST*) header;
+                        //rec->RecordType = (int) r;
+                        //rec->Rec = (RAT::DS::CAST*) header;
+                        //tree->Fill();
+                        dispatcher->sendObject(cast);
+                    }
+                    else {
+                        printf("shipper: encountered header of unknown type %i in run header buffer\n", r);
+                    }
+                    free(header);
+                }
+                else
+                    break;
             }
-            irhdr++;
-            irhdr %= run_header_buffer->size;
         }
 
         // hold until we get a run header
@@ -125,55 +178,14 @@ void* shipper(void* ptr) {
                 printf("shipper: waiting for run header...\n");
                 print_rh_waiting = true;
             }
+            //printf("no active run or outfile\n");
             continue;
         }
         print_rh_waiting = false;
 
-        while (run_header_buffer->keys[run_header_buffer->read]) {
-            void* header = run_header_buffer->keys[run_header_buffer->read];
-            RecordType r = run_header_buffer->type[run_header_buffer->read];
-            int first_gtid;
-            if (r == RUN_HEADER)
-                first_gtid = ((RAT::DS::RHDR*) header)->ValidEventID;
-            if (r == AV_STATUS_HEADER)
-                first_gtid = 0; //((CAAC*) header)->first_event_id;
-            if (r == MANIPULATOR_STATUS_HEADER)
-                first_gtid = 0; //((CAST*) header)->first_event_id;
-
-            if (first_gtid <= ertemp->gtid) {
-                buffer_pop(run_header_buffer, &r, &header);
-                if (r == RUN_HEADER) {
-                    //rec->RecordType = (int) r;
-                    //rec->Rec = (RAT::DS::RHDR*) header;
-                    //tree->Fill();
-                    //dispatcher->sendObject(rec);
-                    dispatcher->sendObject((RAT::DS::RHDR*)header);
-                }
-                else if (r == AV_STATUS_HEADER) {
-                    //rec->RecordType = (int) r;
-                    //rec->Rec = (RAT::DS::CAAC*) header;
-                    //tree->Fill();
-                    //dispatcher->sendObject(rec);
-                    dispatcher->sendObject((RAT::DS::CAAC*)header);
-                }
-                else if (r == MANIPULATOR_STATUS_HEADER) {
-                    //rec->RecordType = (int) r;
-                    //rec->Rec = (RAT::DS::CAST*) header;
-                    //tree->Fill();
-                    //dispatcher->sendObject(rec);
-                    dispatcher->sendObject((RAT::DS::CAST*)header);
-                }
-                else {
-                    printf("shipper: encountered header of unknown type %i in run header buffer\n", r);
-                }
-            }
-            else
-                break;
-
-            free(header);
-        }
 
         // ship event-level headers
+        /*
         while (event_header_buffer->keys[event_header_buffer->read]) {
             void* header = event_header_buffer->keys[event_header_buffer->read];
             RecordType r = event_header_buffer->type[event_header_buffer->read];
@@ -207,10 +219,12 @@ void* shipper(void* ptr) {
             else
                 break;
         }
+        */
 
-        if (ertemp) {
+        if (ertemp && !flush_all_buffers) {
             clock_t time_event = ertemp->arrival_time;
             if((float)(clock() - time_event) / CLOCKS_PER_SEC < QUEUE_DELAY) {
+                //printf("gonna hang onto this for a while\n");
                 continue;
             }
         }
@@ -248,7 +262,7 @@ void* shipper(void* ptr) {
                    if (!er->has_caen)
                    printf("shipper: gtid %#x has no caen data\n", er->gtid);
                    }
-                   */
+                 */
                 delete e;
                 delete er;
             }

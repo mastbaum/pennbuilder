@@ -15,6 +15,8 @@ extern Buffer* event_buffer;
 extern Buffer* run_header_buffer;
 
 int run_active;
+extern bool flush_all_buffers;
+extern bool flush_complete;
 
 ORBuilderProcessor::ORBuilderProcessor(std::string /*label*/) {
     SetComponentBreakReturnsFailure();
@@ -272,14 +274,29 @@ ORDataProcessor::EReturnCode ORBuilderProcessor::ProcessDataRecord(UInt_t* recor
         if (code != kSuccess)
             return code;
 
-        if (!(record[1] & 0x8) && !(record[1] & 0x2)) {
-            fCurrentGTId = 0;
-            fCaenOffset = 0;
-            fCaenLastGTId = 0;
-            pMTCCount = 0;
-            pCaenCount = 0;
-            pPMTCount = 0;
-            fEventOrder = 0;
+        if (record[1] & 0x1) {
+            if (record[1] & 0x2) {
+                printf("orca: soft run start");
+            }
+            else {
+                printf("orca: hard run start");
+
+                // it's the only way
+                flush_all_buffers = true;
+                while (!flush_complete) {
+                    continue;
+                }
+                flush_all_buffers = false;
+                flush_complete = false;
+
+                fCurrentGTId = 0;
+                fCaenOffset = 0;
+                fCaenLastGTId = 0;
+                pMTCCount = 0;
+                pCaenCount = 0;
+                pPMTCount = 0;
+                fEventOrder = 0;
+            }
         }
 
         printf("orca: %i/%#x: caen %f | pmt %f | mtc %f | unhandled %f\n",

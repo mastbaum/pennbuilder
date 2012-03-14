@@ -17,7 +17,7 @@
  *  Andy Mastbaum (mastbaum@hep.upenn.edu), June 2011
  */ 
 
-#define EVENT_BUFFER_SIZE 10000
+#define EVENT_BUFFER_SIZE 500000
 #define EVENT_HEADER_BUFFER_SIZE 50
 #define RUN_HEADER_BUFFER_SIZE 20
 
