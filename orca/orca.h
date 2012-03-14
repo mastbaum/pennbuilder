@@ -13,6 +13,11 @@
 #include <string>
 #include <vector>
 
+struct OrcaURL {
+    char* host;
+    int port;
+};
+
 class ORBuilderProcessor : public ORCompoundDataProcessor {
   public:
     ORBuilderProcessor(std::string label = "SNOPackedFile.root");

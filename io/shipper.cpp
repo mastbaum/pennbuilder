@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <string.h>
 #include <pthread.h>
 #include <signal.h>
 #include <time.h>
@@ -11,15 +10,26 @@
 #include <TFile.h>
 #include <TTree.h>
 
-#include "PackedEvent.hh"
-#include "shipper.h"
-#include "ds.h"
-#include "handler.h"
+#include <PackedEvent.hh>
+#include <shipper.h>
+#include <ds.h>
+#include <handler.h>
 
-extern Buffer* event_buffer;
-extern Buffer* event_header_buffer;
-extern Buffer* run_header_buffer;
-extern int run_active;
+extern Buffer event_buffer;
+extern std::deque<RAT::DS::GenericRec*> event_header_buffer;
+extern std::deque<RAT::DS::GenericRec*> run_header_buffer;
+
+struct RunState {
+    uint32_t run_id;
+    bool active;
+};
+
+struct BuilderState {
+    uint32_t run_id;
+
+};
+
+extern RunState run_state;
 
 TFile* outfile = NULL;
 TTree* tree = NULL;

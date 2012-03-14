@@ -1,16 +1,13 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <string.h>
-#include <pthread.h>
-#include <assert.h>
-#include <jemalloc/jemalloc.h>
-#include "PackedEvent.hh"
+#include <iostream>
+#include <queue>
 
-#include "listener.h"
-#include "orca.h"
-#include "shipper.h"
-#include "ds.h"
+#include <pthread.h>
+#include <jemalloc/jemalloc.h>
+
+#include <listener.h>
+#include <orca.h>
+#include <shipper.h>
+#include <ds.h>
 
 /** Event Builder for SNO+, C++ edition
  *
@@ -24,9 +21,9 @@
 #define EVENT_HEADER_BUFFER_SIZE 50
 #define RUN_HEADER_BUFFER_SIZE 20
 
-Buffer* event_buffer;
-Buffer* event_header_buffer;
-Buffer* run_header_buffer;
+Buffer event_buffer(EVENT_BUFFER_SIZE);
+std::deque<RAT::DS::GenericRec*> event_header_buffer;
+std::deque<RAT::DS::GenericRec*> run_header_buffer;
 
 int main(int argc, char *argv[])
 {
@@ -37,7 +34,7 @@ int main(int argc, char *argv[])
     }
     else {
         printf("Usage: %s <port> [orca_address orca_port]\n", argv[0]);
-        exit(1);
+        return 1;
     }
 
     OrcaURL* url = NULL;
@@ -47,31 +44,29 @@ int main(int argc, char *argv[])
         url->port = atoi(argv[3]);
     }
 
-    // initialization
-    assert(buffer_alloc(&event_buffer, EVENT_BUFFER_SIZE));
-    assert(buffer_alloc(&event_header_buffer, EVENT_HEADER_BUFFER_SIZE));
-    assert(buffer_alloc(&run_header_buffer, RUN_HEADER_BUFFER_SIZE));
-
     // launch listener (input) and shipper (output) threads
     pthread_t tlistener;
     pthread_create(&tlistener, NULL, listener, (void*)&port);
+
+    pthread_t tshipper;
+    pthread_create(&tshipper, NULL, shipper, NULL);
 
     pthread_t torcalistener;
     if (url) {
         pthread_create(&torcalistener, NULL, orca_listener, (void*)url);
     }
 
-    pthread_t tshipper;
-    pthread_create(&tshipper, NULL, shipper, NULL);
-
     // wait for threads to join before exiting
     pthread_join(tlistener, NULL);
+    pthread_join(tshipper, NULL);
     if (url) {
         pthread_join(torcalistener, NULL);
     }
-    pthread_join(tshipper, NULL);
 
     delete url;
+
+    event_header_buffer.clear();
+    run_header_buffer.clear();
 
     return 0;
 }
