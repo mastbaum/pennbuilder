@@ -1,6 +1,7 @@
 #include <iostream>
 #include <queue>
 
+#include <stdlib.h>
 #include <pthread.h>
 #include <jemalloc/jemalloc.h>
 
@@ -17,13 +18,13 @@
  *  Andy Mastbaum (mastbaum@hep.upenn.edu), June 2011
  */ 
 
-#define EVENT_BUFFER_SIZE 500000
-#define EVENT_HEADER_BUFFER_SIZE 50
-#define RUN_HEADER_BUFFER_SIZE 20
+#define EVENT_BUFFER_SIZE 0x3ffff
 
-Buffer event_buffer(EVENT_BUFFER_SIZE);
-std::deque<RAT::DS::GenericRec*> event_header_buffer;
-std::deque<RAT::DS::GenericRec*> run_header_buffer;
+Buffer<EventRecord*>* event_buffer = new Buffer<EventRecord*>(EVENT_BUFFER_SIZE);
+std::deque<RAT::DS::PackedRec*> event_header_buffer;
+std::deque<RAT::DS::PackedRec*> run_header_buffer;
+
+BuilderStats stats;
 
 int main(int argc, char *argv[])
 {
@@ -45,8 +46,8 @@ int main(int argc, char *argv[])
     }
 
     // launch listener (input) and shipper (output) threads
-    pthread_t tlistener;
-    pthread_create(&tlistener, NULL, listener, (void*)&port);
+    //pthread_t tlistener;
+    //pthread_create(&tlistener, NULL, listener, (void*)&port);
 
     pthread_t tshipper;
     pthread_create(&tshipper, NULL, shipper, NULL);
@@ -57,13 +58,14 @@ int main(int argc, char *argv[])
     }
 
     // wait for threads to join before exiting
-    pthread_join(tlistener, NULL);
+    //pthread_join(tlistener, NULL);
     pthread_join(tshipper, NULL);
     if (url) {
         pthread_join(torcalistener, NULL);
     }
 
     delete url;
+    delete event_buffer;
 
     event_header_buffer.clear();
     run_header_buffer.clear();

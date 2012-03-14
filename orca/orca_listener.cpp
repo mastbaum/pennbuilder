@@ -50,8 +50,8 @@ void* orca_listener(void* arg) {
         /* Starting server, binding to a port. */
         if (!server->IsValid()) {
             std::cout << "Error listening on port " << portToListenOn 
-                << std::endl << "Error code: " << server->GetErrorCode()
-                << std::endl;
+                      << std::endl << "Error code: " << server->GetErrorCode()
+                      << std::endl;
             return NULL;
         }
 
@@ -68,7 +68,7 @@ void* orca_listener(void* arg) {
                 if(childPIDRecord.erase(childpid) != 1) {
                     /* Something really weird happened. */
                     std::cout << "Ended child process " << childpid 
-                        << " not recognized!" << std::endl;
+                              << " not recognized!" << std::endl;
                 }
             }
             while((childpid = wait3(0,WNOHANG,0)) > 0) {
@@ -77,7 +77,7 @@ void* orca_listener(void* arg) {
                 if(childPIDRecord.erase(childpid) != 1) {
                     /* Something really weird happened. */
                     std::cout << "Ended child process " << childpid 
-                        << " not recognized!" << std::endl;
+                              << " not recognized!" << std::endl;
                 }
             } 
             std::cout << childPIDRecord.size()  << " connections running..." << std::endl;
@@ -105,7 +105,7 @@ void* orca_listener(void* arg) {
             } 
             /* Parent process: wait for next connection. Close our descriptor. */
             std::cout << "Connection accepted, child process begun with pid: " 
-                << childpid << std::endl;
+                      << childpid << std::endl;
             childPIDRecord.insert(childpid);
             delete sock; 
         }
@@ -123,7 +123,7 @@ void* orca_listener(void* arg) {
         return NULL;
     }
 
-    std::cout << "Setting up data processing manager..." << std::endl;
+    std::cout << "orca_listener: setting up data processing manager..." << std::endl;
     ORDataProcManager dataProcManager(reader);
 
     /* Declare processors here. */
@@ -136,13 +136,13 @@ void* orca_listener(void* arg) {
         dataProcManager.AddProcessor(&orcaReq);
     } else {
         /* Add the processors here to run them in normal mode. */
-        std::cout << "adding builderproc" << std::endl;
+        std::cout << "orca_listener: adding builderproc" << std::endl;
         dataProcManager.AddProcessor(&builderProcessor);
     }
 
-    std::cout << "Start processing..." << std::endl;
+    std::cout << "orca_listener: start processing..." << std::endl;
     dataProcManager.ProcessDataStream();
-    std::cout << "Finished processing..." << std::endl;
+    std::cout << "orca_listener: finished processing..." << std::endl;
 
     delete reader;
     delete handlerThread;

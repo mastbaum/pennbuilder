@@ -1,5 +1,7 @@
 #ifdef __CINT__
 #pragma link C++ class RAT::DS::RHDR+;
+#pragma link C++ class RAT::DS::EPED+;
+#pragma link C++ class RAT::DS::TRIG+;
 #pragma link C++ class RAT::DS::PMTBundle+;
 #pragma link C++ class RAT::DS::CaenTrace+;
 #pragma link C++ class RAT::DS::CaenBundle+;

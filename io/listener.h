@@ -1,6 +1,8 @@
 #ifndef __PENNBUILDER_LISTENER__
 #define __PENNBUILDER_LISTENER__
 
+#include <stdint.h>
+
 #define NUM_THREADS 20
 #define HEADER_LENGTH 6
 #define MEGASIZE 119

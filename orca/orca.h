@@ -1,17 +1,15 @@
 #ifndef __PENNBUILDER_ORCA__
 #define __PENNBUILDER_ORCA__
 
-#include "ORCompoundDataProcessor.hh"
-#include "ORFileWriter.hh"
-#include "ORMTCDecoder.hh"
-#include "ORPMTDecoder.hh"
-#include "ORRunDecoder.hh"
-#include "ORCaen1720Decoder.hh"
-#include "PackedEvent.hh"
+#include <stdint.h>
 
-#include <map>
-#include <string>
-#include <vector>
+#include <ORCompoundDataProcessor.hh>
+#include <ORMTCDecoder.hh>
+#include <ORPMTDecoder.hh>
+#include <ORRunDecoder.hh>
+#include <ORCaen1720Decoder.hh>
+
+#include <PackedEvent.hh>
 
 struct OrcaURL {
     char* host;
@@ -19,35 +17,31 @@ struct OrcaURL {
 };
 
 class ORBuilderProcessor : public ORCompoundDataProcessor {
-  public:
-    ORBuilderProcessor(std::string label = "SNOPackedFile.root");
-    virtual ~ORBuilderProcessor();
-    virtual EReturnCode StartRun();
-    virtual EReturnCode ProcessDataRecord(UInt_t* record);
-    virtual EReturnCode EndRun();
+    public:
+        ORBuilderProcessor(std::string label="");
+        virtual ~ORBuilderProcessor();
+        virtual EReturnCode StartRun();
+        virtual EReturnCode ProcessDataRecord(UInt_t* record);
+        virtual EReturnCode EndRun();
 
-  protected:
-	ORMTCDecoder fMTCDecoder;
-	ORPMTDecoder fPMTDecoder;
-	ORCaen1720Decoder fCaenDecoder;
-	ORRunDecoder fRunDecoder;
+    protected:
+        ORMTCDecoder fMTCDecoder;
+        ORPMTDecoder fPMTDecoder;
+        ORCaen1720Decoder fCaenDecoder;
+        ORRunDecoder fRunDecoder;
 
-	ORDataProcessor* fMTCProcessor;
-	ORDataProcessor* fPMTProcessor;
-	ORDataProcessor* fCaenProcessor;
-	ORDataProcessor* fRunProcessor;
+        ORDataProcessor* fMTCProcessor;
+        ORDataProcessor* fPMTProcessor;
+        ORDataProcessor* fCaenProcessor;
+        ORDataProcessor* fRunProcessor;
 
-	unsigned int fCaenOffset;
-	unsigned int fCaenLastGTId;
-	unsigned int pMTCCount;
-        unsigned int pCaenCount;
-        unsigned int pPMTCount;
-        unsigned int fEventOrder;
-
-        ULong_t fTotalReceived;
-        ULong_t pUnhandledCount;
-	UInt_t fCurrentGTId;
         bool fFirstGTIdSet;
+        uint32_t fCurrentGTId;
+        uint64_t fEventOrder;
+
+        uint32_t fCaenOffset;
+        uint32_t fCaenLastGTId;
+
         UInt_t fMTCDataId;
         UInt_t fCaenDataId;
         UInt_t fPMTDataId;
