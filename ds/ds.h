@@ -65,9 +65,6 @@ class BuilderStats {
         BuilderStats() : run_id(0), events_written(0), events_with_pmt(0), events_with_mtc(0), events_with_caen(0) {
             filename = (char*) calloc(100, sizeof(char));
         }
-        ~BuilderStats() {
-            free(filename);
-        }
         uint64_t events_written;
         uint64_t events_with_pmt;
         uint64_t events_with_mtc;

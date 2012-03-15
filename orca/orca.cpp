@@ -97,8 +97,8 @@ ORDataProcessor::EReturnCode ORBuilderProcessor::ProcessDataRecord(UInt_t* recor
             return code;
 
         uint32_t gtid = record[4] & 0xffffff;    
-        //std::cout << "got mtc data, gtid: " << gtid << std::endl;
         uint64_t idx = gtid & 0x3ffff; // bottom 17 bits, per ph
+        //std::cout << "got mtc data, gtid: " << std::hex << gtid << ", idx: " << idx << std::dec << std::endl;
 
         fCurrentGTId = gtid;
 
@@ -109,17 +109,18 @@ ORDataProcessor::EReturnCode ORBuilderProcessor::ProcessDataRecord(UInt_t* recor
         }
 
         if (!fFirstGTIdSet) {
+            printf("orca: set read idx to %#x, gtid %#x\n", (unsigned int) idx, gtid);
             fFirstGTIdSet = true;
             event_buffer->read = idx;
         }
 
-        pthread_mutex_lock(&(event_buffer->mutex[idx]));
+        //pthread_mutex_lock(&(event_buffer->mutex[idx]));
 
         EventRecord* er = event_buffer->elem[idx];
 
         if (er) {
             if (er->gtid != gtid) {
-                printf("orca: buffer overflow! ignoring gtid %i\n", gtid);
+                printf("orca: buffer overflow! ignoring gtid %#x\n", gtid);
                 return kSuccess;
             }
             if (er->has_mtc) {
@@ -131,7 +132,7 @@ ORDataProcessor::EReturnCode ORBuilderProcessor::ProcessDataRecord(UInt_t* recor
             er = new EventRecord();
             er->event = new RAT::DS::PackedEvent();
             er->arrival_time = 0;
-            er->gtid = 0;
+            er->gtid = gtid;
             er->has_mtc = true;
             er->has_pmt = false;
             er->has_caen = false;
@@ -139,6 +140,8 @@ ORDataProcessor::EReturnCode ORBuilderProcessor::ProcessDataRecord(UInt_t* recor
             event_buffer->elem[idx] = er;
         }
 
+        //printf("orca: set write idx to %#x\n", idx);
+        event_buffer->write = idx;
         er->event->EVOrder = fEventOrder;
         fEventOrder++;
 
@@ -149,14 +152,14 @@ ORDataProcessor::EReturnCode ORBuilderProcessor::ProcessDataRecord(UInt_t* recor
         er->event->MTCInfo[4] = fMTCDecoder.Wrd4(record);
         er->event->MTCInfo[5] = fMTCDecoder.Wrd5(record);
 
+        er->has_mtc = true;
         er->gtid = gtid;
         er->arrival_time = clock(); // arrival time is time of last data received
 
-        pthread_mutex_unlock(&(event_buffer->mutex[idx]));
+        //pthread_mutex_unlock(&(event_buffer->mutex[idx]));
     }
     else if (thisDataId == fPMTDataId) {
         fPMTDecoder.Swap(record);
-	//std::cout << "got megabundle" << std::endl;
 
         unsigned int bundle_length = (fPMTDecoder.LengthOf(record) - 2) / 3;
         //printf("bundle_length %i\n", bundle_length);
@@ -164,21 +167,23 @@ ORDataProcessor::EReturnCode ORBuilderProcessor::ProcessDataRecord(UInt_t* recor
         for (; bundle_length != 0; bundle_length--) {
             uint32_t gtid = fPMTDecoder.GTId(record);
             uint64_t idx = gtid & 0x3ffff;
+            //std::cout << "got pmt data, gtid: " << std::hex << gtid << ", idx: " << idx << std::dec << std::endl;
 
             fCurrentGTId = gtid;
 
             if (!fFirstGTIdSet) {
+                printf("orca: set read idx to %#x, gtid %#x\n", (unsigned int) idx, gtid);
                 fFirstGTIdSet = true;
                 event_buffer->read = idx;
             }
 
-            pthread_mutex_lock(&(event_buffer->mutex[idx]));
+            //pthread_mutex_lock(&(event_buffer->mutex[idx]));
 
             EventRecord* er = event_buffer->elem[idx];
 
             if (er) {
                 if (er->gtid != gtid) {
-                    printf("Buffer overflow! Ignoring GTID %i\n", gtid);
+                    printf("orca: buffer overflow! pos: %#x, has: %#x, this: %#x\n", (unsigned int) idx, er->gtid, gtid);
                     return kSuccess;
                 }
             }
@@ -186,13 +191,16 @@ ORDataProcessor::EReturnCode ORBuilderProcessor::ProcessDataRecord(UInt_t* recor
                 er = new EventRecord();
                 er->event = new RAT::DS::PackedEvent();
                 er->arrival_time = 0;
-                er->gtid = 0;
+                er->gtid = gtid;
                 er->has_mtc = false;
                 er->has_pmt = true;
                 er->has_caen = false;
 
                 event_buffer->elem[idx] = er;
             }
+
+            //printf("orca: set write idx to %#x\n", idx);
+            event_buffer->write = idx;
 
             RAT::DS::PMTBundle rpmtb;
             rpmtb.Word[0] = fPMTDecoder.Wrd0(record);
@@ -201,9 +209,10 @@ ORDataProcessor::EReturnCode ORBuilderProcessor::ProcessDataRecord(UInt_t* recor
             er->event->PMTBundles.push_back(rpmtb);
             er->event->NHits++;
 
+            er->has_pmt = true;
             record += 3;
 
-	    pthread_mutex_unlock(&(event_buffer->mutex[idx]));
+	    //pthread_mutex_unlock(&(event_buffer->mutex[idx]));
         }
     }
     else if (thisDataId == fCaenDataId) {
@@ -218,24 +227,25 @@ ORDataProcessor::EReturnCode ORBuilderProcessor::ProcessDataRecord(UInt_t* recor
             gtid++;
         gtid += fCaenOffset;
         gtid &= 0x00ffffff;
-	//std::cout << "got caen data, gtid: " << gtid << std::endl;
 
         uint64_t idx = gtid & 0x3ffff;
+        //std::cout << "got caen data, gtid: " << std::hex << gtid << ", idx: " << idx << std::dec << std::endl;
 
         fCurrentGTId = gtid;
 
         if (!fFirstGTIdSet) {
+            printf("orca: set read idx to %#x, gtid %#x\n", (unsigned int) idx, gtid);
             fFirstGTIdSet = true;
             event_buffer->read = idx;
         }
 
-        pthread_mutex_lock(&(event_buffer->mutex[idx]));
+        //pthread_mutex_lock(&(event_buffer->mutex[idx]));
 
         EventRecord* er = event_buffer->elem[idx];
 
         if (er) {
             if (er->gtid != gtid) {
-                printf("Buffer overflow! Ignoring GTID %i\n", gtid);
+                printf("orca: buffer overflow! ignoring gtid %#x\n", gtid);
                 return kSuccess;
             }
             if (er->has_caen) {
@@ -247,13 +257,16 @@ ORDataProcessor::EReturnCode ORBuilderProcessor::ProcessDataRecord(UInt_t* recor
             er = new EventRecord();
             er->event = new RAT::DS::PackedEvent();
             er->arrival_time = 0;
-            er->gtid = 0;
+            er->gtid = gtid;
             er->has_mtc = false;
             er->has_pmt = false;
             er->has_caen = true;
 
             event_buffer->elem[idx] = er;
         }
+
+        //printf("orca: set write idx to %#x\n", idx);
+        event_buffer->write = idx;
 
         UInt_t n = fCaenDecoder.LengthOf(record) - 2;
 
@@ -279,8 +292,9 @@ ORDataProcessor::EReturnCode ORBuilderProcessor::ProcessDataRecord(UInt_t* recor
         }
 
         er->event->Caen = rcaen;
+        er->has_caen = true;
 
-        pthread_mutex_unlock(&(event_buffer->mutex[idx]));
+        //pthread_mutex_unlock(&(event_buffer->mutex[idx]));
     }
     else if (thisDataId == fRunDataId) {
         ORDataProcessor::EReturnCode code = ORCompoundDataProcessor::ProcessDataRecord(record);

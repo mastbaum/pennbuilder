@@ -34,35 +34,36 @@ void* shipper(void* ptr) {
     avalanche::server* dispatcher = new avalanche::server(DISPATCHER_ADDRESS);
     outfile = NULL;
     tree = NULL;
+    clock_t time_last_print = 0;
 
     signal(SIGINT, &handler);
     while (1) {
         // FIXME status print to separate thread, print then sleep
-        /*
-        clock_t time_last_print = 0;
-        if ((float)(clock() - time_last_print) / CLOCKS_PER_SEC > 0.25) {
-            unsigned gtid_head = event_buffer->keys[event_buffer->write-1] ? \
-                                 ((EventRecord*)(event_buffer->keys[event_buffer->write-1]))->gtid : 0;
+        if ((float)(clock() - time_last_print) / CLOCKS_PER_SEC > 0.5) {
+            printf("------------------------------------------------------------\n");
 
-            printf("shipper: run %i: events (%#x) %lu..<%lu>..%lu (%#x) | headers %lu..<%lu>..%lu  | %s\n",
-                    outfile ? stats.run_id : 0,
-                    gtid_head,
-                    event_buffer->read,
-                    (event_buffer->write-event_buffer->read) % event_buffer->size,
-                    event_buffer->write,
-                    gtid_last_shipped,
-                    run_header_buffer->read,
-                    (run_header_buffer->write-run_header_buffer->read) % run_header_buffer->size,
-                    run_header_buffer->write,
-                    run_active ? "running" : "run stoppped");
+            printf("run %i (%s), file: %s\n",
+                stats.run_id,
+                stats.run_active ? "active" : "stopped",
+                stats.filename);
+
+            printf("events: queued %lu, last out %#x, last in %#x | buffer %#x..%#x\n",
+                (event_buffer->write-event_buffer->read) % event_buffer->size,
+                gtid_last_shipped,
+                event_buffer->elem[event_buffer->write] ? event_buffer->elem[event_buffer->write]->gtid : 0xffffff,
+                (unsigned int) event_buffer->read,
+                (unsigned int) event_buffer->write);
+
+            printf("events: %lu out, %lu pmt, %lu mtc, %lu caen, (%lu total records)\n", stats.events_written, stats.events_with_pmt, stats.events_with_mtc, stats.events_with_caen, stats.records_received);
+
+            printf("evhdr:  queued %lu\n", event_header_buffer.size());
+
+            printf("runhdr: queued %lu\n", run_header_buffer.size());
 
             time_last_print = clock();
-            
         }
-        */
 
-        //// do nothing if the event buffer is empty
-        if (event_buffer->read == event_buffer->write) {
+        if (event_buffer->read == event_buffer->write) { // && !event_buffer->elem[event_buffer->read])
             continue;
         }
 
@@ -75,11 +76,11 @@ void* shipper(void* ptr) {
             current_gtid++;
 
         //// ship run headers (assume that they arrive in order)
-        while (run_header_buffer.front()) {
-            RAT::DS::PackedRec* rtemp = run_header_buffer.front();
+        while (!run_header_buffer.empty() && run_header_buffer.back()) {
+            RAT::DS::PackedRec* rtemp = run_header_buffer.back();
             if (rtemp->RecordType == RAT::DS::kRecRHDR) {
-                RAT::DS::RHDR* rhdr = dynamic_cast<RAT::DS::RHDR*>(rtemp->Rec);
-                if (current_gtid == rhdr->ValidEventID) {
+                RAT::DS::RHDR* rhdr = reinterpret_cast<RAT::DS::RHDR*>(rtemp->Rec);
+                if (current_gtid >= rhdr->ValidEventID) {
                     if (outfile) {
                         outfile->cd();
                         tree->Write();
@@ -115,7 +116,7 @@ void* shipper(void* ptr) {
             }
             /*
             else if (rtemp->RecordType == RAT::DS::kRecCAAC) {
-                RAT::DS::CAAC* caac = dynamic_cast<RAT::DS::CAAC*>(rtemp->Rec);
+                RAT::DS::CAAC* caac = reinterpret_cast<RAT::DS::CAAC*>(rtemp->Rec);
                 if (current_gtid >= 0) { // caac->ValidEventID) 
                     //rec->RecordType = rtemp->RecordType;
                     //rec->Rec = caac;
@@ -129,7 +130,7 @@ void* shipper(void* ptr) {
                     break;
             }
             else if (rtemp->RecordType == RAT::DS::kRecCAST) {
-                RAT::DS::CAST* cast = dynamic_cast<RAT::DS::CAST*>(rtemp->Rec);
+                RAT::DS::CAST* cast = reinterpret_cast<RAT::DS::CAST*>(rtemp->Rec);
                 if (current_gtid >= 0) { // cast->ValidEventID) 
                     //rec->RecordType = rtemp->RecordType;
                     //rec->Rec = cast;
@@ -161,11 +162,11 @@ void* shipper(void* ptr) {
         print_rh_waiting = false;
 
         //// ship event-level headers
-        while (event_header_buffer.front()) {
-            RAT::DS::PackedRec* rtemp = event_header_buffer.front();
+        while (!event_header_buffer.empty() && event_header_buffer.back()) {
+            RAT::DS::PackedRec* rtemp = event_header_buffer.back();
 
             if (rtemp->RecordType == RAT::DS::kRecEPED) {
-                RAT::DS::EPED* eped = dynamic_cast<RAT::DS::EPED*>(rtemp->Rec);
+                RAT::DS::EPED* eped = reinterpret_cast<RAT::DS::EPED*>(rtemp->Rec);
                 if (current_gtid >= eped->EventID) {
                     //rec->RecordType = rtemp->RecordType;
                     //rec->Rec = eped;
@@ -178,7 +179,7 @@ void* shipper(void* ptr) {
                     break;
             }
             else if (rtemp->RecordType == RAT::DS::kRecTRIG) {
-                RAT::DS::TRIG* trig = dynamic_cast<RAT::DS::TRIG*>(rtemp->Rec);
+                RAT::DS::TRIG* trig = reinterpret_cast<RAT::DS::TRIG*>(rtemp->Rec);
                 if (current_gtid >= trig->EventID) {
                     //rec->RecordType = rtemp->RecordType;
                     //rec->Rec = eped;
@@ -201,9 +202,9 @@ void* shipper(void* ptr) {
         if (!er) {
             if ((float)(clock() - time_last_shipped) / CLOCKS_PER_SEC > SKIP_GTID_DELAY) {
                 current_gtid++;
-                event_buffer->read++;
+                event_buffer->read = (event_buffer->read + 1) % event_buffer->size;
                 time_last_shipped = clock();
-                printf("shipper: skipped missing gtid after timeout, idx: %lu\n", event_buffer->read);
+                printf("shipper: skipped missing gtid after timeout, idx: %#x\n", (unsigned int) event_buffer->read);
             }
             continue;
         }
@@ -241,7 +242,7 @@ void* shipper(void* ptr) {
 
         delete er;
         event_buffer->elem[event_buffer->read] = NULL;
-        event_buffer->read = ++event_buffer->read % event_buffer->size;
+        event_buffer->read = (event_buffer->read + 1) % event_buffer->size;
     }
 
     delete dispatcher;
