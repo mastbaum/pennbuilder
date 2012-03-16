@@ -313,20 +313,8 @@ ORDataProcessor::EReturnCode ORBuilderProcessor::ProcessDataRecord(UInt_t* recor
                 fCaenLastGTId = 0;
             }
         }
-
-        // FIXME move printout to new thread
-        /*
-        printf("orca: %i/%#x: caen %f | pmt %f | mtc %f | unhandled %f\n",
-            (int)GetRunContext()->GetRunNumber(),
-            fCurrentGTId,
-            (float)pCaenCount/fEventOrder,
-            (float)pPMTCount/fEventOrder,
-            (float)pMTCCount/fEventOrder,
-            (float)pUnhandledCount/fTotalReceived);
-        */
     }
     else {
-        //std::cout << "unhandled record: id: " << std::hex << (int)thisDataId << std::dec << std::endl;
         stats.records_unhandled++;
     }
 
